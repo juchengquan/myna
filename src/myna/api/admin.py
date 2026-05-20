@@ -31,7 +31,7 @@ async def require_admin(
 
 
 def get_mcp_from_request(request: Request) -> FastMCP:
-    mcp = getattr(request.app.state, "mcp", None)
+    mcp: FastMCP | None = getattr(request.app.state, "mcp", None)
     if mcp is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

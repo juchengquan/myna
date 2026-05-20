@@ -67,3 +67,22 @@ uv run pytest
 uv run ruff check .
 uv run mypy src
 ```
+
+### End-to-end smoke test
+
+`pytest` exercises tools in-process. To verify the full Streamable HTTP
+transport with a real MCP client, run the server in one shell and the
+smoke test in another:
+
+```bash
+# shell 1
+uv run myna
+
+# shell 2
+uv run python scripts/smoke_test.py
+# or against a non-default URL:
+uv run python scripts/smoke_test.py --url http://localhost:8000/mcp/
+```
+
+It initializes a session, lists tools, and calls `ping`, `echo`, and
+`get_weather` (both units).

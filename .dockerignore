@@ -1,6 +1,7 @@
 .git
 .gitignore
 .venv
+# Keep uv.lock — required by `uv sync --frozen` in the image
 venv
 __pycache__
 *.pyc

@@ -9,11 +9,19 @@ Myna exposes:
 
 ## Quickstart
 
+Myna uses [uv](https://docs.astral.sh/uv/) for dependency and project management.
+
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync                 # create .venv and install runtime + dev deps
 cp .env.example .env
-myna  # or: uvicorn myna.main:app --reload
+uv run myna             # or: uv run uvicorn myna.main:app --reload
+```
+
+To add a dependency:
+
+```bash
+uv add <package>              # runtime dep
+uv add --group dev <package>  # dev-only dep
 ```
 
 Then:
@@ -55,5 +63,7 @@ docker run --rm -p 8000:8000 --env-file .env myna
 ## Tests
 
 ```bash
-pytest
+uv run pytest
+uv run ruff check .
+uv run mypy src
 ```

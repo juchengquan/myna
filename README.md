@@ -7,6 +7,9 @@ Myna exposes:
 - An **MCP server** over Streamable HTTP transport at `/mcp`, suitable for remote MCP clients.
 - A **management/admin REST API** under `/api` for health, tool introspection, and operational endpoints.
 
+> Deeper docs live in [`docs/`](docs/) — architecture, configuration,
+> writing tools, client integration, deployment, and the dev workflow.
+
 ## Quickstart
 
 Myna uses [uv](https://docs.astral.sh/uv/) for dependency and project management.

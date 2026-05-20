@@ -1,14 +1,24 @@
 # Myna
 
-MCP service backend built on FastAPI and the official [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk).
+MCP service backend built on **FastAPI**, with the official
+[MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
+mounted as a sub-app to speak the MCP wire protocol.
 
-Myna exposes:
+- FastAPI owns the process — lifespan, routing, OpenAPI, the admin API,
+  and any HTTP routes you add.
+- `FastMCP` is mounted at `/mcp` and is responsible only for the MCP
+  protocol (Streamable HTTP, JSON-RPC, sessions, tool schemas).
+- Tools are plain Python functions in [`src/myna/tools/`](src/myna/tools/).
 
-- An **MCP server** over Streamable HTTP transport at `/mcp`, suitable for remote MCP clients.
-- A **management/admin REST API** under `/api` for health, tool introspection, and operational endpoints.
+Surfaces:
+
+- **MCP server** at `/mcp` over Streamable HTTP transport, for remote MCP clients.
+- **Management/admin REST API** under `/api` — health, tool introspection, and operational endpoints.
 
 > Deeper docs live in [`docs/`](docs/) — architecture, configuration,
 > writing tools, client integration, deployment, and the dev workflow.
+> The "FastAPI hosts, SDK speaks MCP" split is explained in
+> [`docs/architecture.md`](docs/architecture.md).
 
 ## Quickstart
 

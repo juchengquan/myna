@@ -1,0 +1,19 @@
+.git
+.gitignore
+.venv
+# Keep uv.lock — required by `uv sync --frozen` in the image
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+.env
+.env.*
+!.env.example
+tests
+.github
+*.md
+!README.md

@@ -139,6 +139,52 @@ Claude Desktop and Claude Code do; many smaller SDK-based clients
 don't. The example tool surfaces a clear error when the capability is
 missing rather than hanging.
 
+## Elicitation — asking the user
+
+Where sampling asks the *client's LLM*, elicitation asks the *user*. The
+server pauses the tool, the client renders the prompt with the supplied
+schema, and the tool resumes when the user answers (or declines, or
+cancels).
+
+Use it when a typed decision shouldn't be made unilaterally by the LLM
+— confirming a destructive action, picking between a small set of
+options, supplying a value the LLM has no way to know.
+
+```python
+from typing import Any
+from mcp.server.fastmcp import Context, FastMCP
+from pydantic import BaseModel, Field
+
+class ConfirmAnswer(BaseModel):
+    confirmed: bool = Field(description="Approve the action?")
+    note: str = Field(default="", description="Optional comment.")
+
+def register(mcp: FastMCP) -> None:
+    @mcp.tool()
+    async def confirm_action(ctx: Context[Any, Any, Any], action: str) -> str:
+        result = await ctx.elicit(
+            message=f"Please confirm: {action}",
+            schema=ConfirmAnswer,
+        )
+        if result.action == "accept" and result.data:
+            return f"approved={result.data.confirmed} note={result.data.note!r}"
+        return f"user {result.action}ed"
+```
+
+The result has three possible `action` values:
+
+- `accept` — user filled in the schema; `result.data` is populated.
+- `decline` — user explicitly said no; `result.data` is `None`.
+- `cancel` — user dismissed the prompt without answering.
+
+See [`tools/elicitation.py`](../src/myna/tools/elicitation.py) for the
+runnable example (`confirm_action`).
+
+**Compatibility caveat:** same as sampling — the client must advertise
+the `elicitation` capability. Modern clients support it; the example
+tool surfaces a clear error rather than hanging on a request the
+client can't satisfy.
+
 ## Errors
 
 Raise normal Python exceptions. They are converted to MCP error responses

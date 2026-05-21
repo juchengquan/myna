@@ -12,4 +12,5 @@ Reference docs for the Myna MCP service backend. The top-level
 | [api.md](api.md) | Admin REST API reference |
 | [client-integration.md](client-integration.md) | Connecting MCP clients to Myna |
 | [deployment.md](deployment.md) | Docker, production checklist, observability |
+| [local-observability.md](local-observability.md) | One-command local stack (Myna + Jaeger + Prometheus) for poking the telemetry surface |
 | [development.md](development.md) | Local dev workflow, testing, linting |

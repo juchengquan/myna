@@ -1,0 +1,16 @@
+# Prometheus scrape config for the local dev stack (docker-compose.yml).
+#
+# Only target: the Myna container's /metrics endpoint. The service
+# discovery here is the container name `myna` resolved by Docker's
+# embedded DNS, so this file only works inside the compose network.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: myna
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - myna:8000

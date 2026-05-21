@@ -18,7 +18,9 @@ Surfaces:
 > Deeper docs live in [`docs/`](docs/) — architecture, configuration,
 > writing tools, client integration, deployment, and the dev workflow.
 > The "FastAPI hosts, SDK speaks MCP" split is explained in
-> [`docs/architecture.md`](docs/architecture.md).
+> [`docs/architecture.md`](docs/architecture.md). To poke the
+> traces/metrics/logs surface locally with one command, see
+> [`docs/local-observability.md`](docs/local-observability.md).
 
 ## Quickstart
 

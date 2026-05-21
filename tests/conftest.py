@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import asyncio
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 
 import httpx
@@ -63,10 +62,18 @@ def _default_open_meteo_handler(request: httpx.Request) -> httpx.Response:
     return httpx.Response(404, json={"error": f"unmocked URL: {url}"})
 
 
+HandlerSetter = Callable[[Callable[[httpx.Request], httpx.Response]], None]
+
+
 @pytest.fixture()
-def mock_weather() -> Iterator[Callable[[Callable[[httpx.Request], httpx.Response]], None]]:
+async def mock_weather() -> AsyncIterator[HandlerSetter]:
     """Install a mocked WeatherClient. Yields a setter so tests can swap
-    handlers for specific error scenarios."""
+    handlers for specific error scenarios. Async because clearing the
+    shared `_fetch_celsius` cache between tests requires an active event
+    loop — pytest-asyncio (configured `asyncio_mode = "auto"`) gives us
+    one for free here, and using `asyncio.get_event_loop()` directly
+    triggers a DeprecationWarning on Python 3.10+ outside a running loop.
+    """
     state: dict[str, Any] = {"handler": _default_open_meteo_handler}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -74,9 +81,7 @@ def mock_weather() -> Iterator[Callable[[Callable[[httpx.Request], httpx.Respons
 
     transport = httpx.MockTransport(handler)
     weather_tool.set_weather_client(WeatherClient(transport=transport))
-    asyncio.get_event_loop().run_until_complete(
-        weather_tool._fetch_celsius._myna_cache.clear()  # type: ignore[attr-defined]
-    )
+    await weather_tool._fetch_celsius._myna_cache.clear()  # type: ignore[attr-defined]
 
     def use(new_handler: Callable[[httpx.Request], httpx.Response]) -> None:
         state["handler"] = new_handler
@@ -85,6 +90,4 @@ def mock_weather() -> Iterator[Callable[[Callable[[httpx.Request], httpx.Respons
         yield use
     finally:
         weather_tool.set_weather_client(None)
-        asyncio.get_event_loop().run_until_complete(
-            weather_tool._fetch_celsius._myna_cache.clear()  # type: ignore[attr-defined]
-        )
+        await weather_tool._fetch_celsius._myna_cache.clear()  # type: ignore[attr-defined]

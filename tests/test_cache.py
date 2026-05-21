@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from myna.cache import TTLCache, cached
-from myna.observability import TOOL_CACHE
+from myna.observability import TOOL_CACHE, metric_value
 
 
 @pytest.mark.asyncio
@@ -108,4 +108,4 @@ async def test_cached_label_overrides_function_name() -> None:
 
 
 def _counter(tool: str, outcome: str) -> float:
-    return float(TOOL_CACHE.labels(tool=tool, outcome=outcome)._value.get())  # type: ignore[attr-defined]
+    return metric_value(TOOL_CACHE, tool=tool, outcome=outcome)

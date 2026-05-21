@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from myna.config import get_settings
 from myna.main import create_app
-from myna.observability import RATE_LIMIT_HITS
+from myna.observability import RATE_LIMIT_HITS, metric_value
 
 
 def _post(client: TestClient, *, token: str | None = None) -> int:
@@ -91,4 +91,4 @@ def test_rate_limit_hits_counter_increments(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def _counter_value(key_kind: str) -> float:
-    return float(RATE_LIMIT_HITS.labels(key_kind=key_kind)._value.get())  # type: ignore[attr-defined]
+    return metric_value(RATE_LIMIT_HITS, key_kind=key_kind)

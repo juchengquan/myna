@@ -1,0 +1,61 @@
+# Local development stack: Myna + observability backends.
+#
+# Brings up Myna alongside a minimal traces + metrics setup so the
+# audit log, Prometheus series, and OTel spans we emit are all visible
+# in one command:
+#
+#   docker compose up --build
+#
+# - Myna is exposed at http://localhost:8000 (/mcp, /api, /metrics).
+# - Jaeger UI at http://localhost:16686 — search for the `myna` service.
+# - Prometheus at http://localhost:9090 — query `myna_*` for any metric.
+#
+# Intended for development only. Production deployments should run
+# Myna with their own observability backends and the image built from
+# Dockerfile.
+
+services:
+  myna:
+    build: .
+    image: myna:local
+    container_name: myna
+    ports:
+      - "8000:8000"
+    environment:
+      MYNA_ENV: development
+      MYNA_LOG_LEVEL: INFO
+      # Tracing: push OTLP/HTTP straight to Jaeger's built-in collector.
+      MYNA_OTEL_ENABLED: "true"
+      MYNA_OTEL_SERVICE_NAME: myna
+      MYNA_OTEL_EXPORTER_ENDPOINT: http://jaeger:4318/v1/traces
+    depends_on:
+      jaeger:
+        condition: service_started
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62
+    container_name: myna-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # UI
+      - "4318:4318"    # OTLP/HTTP — exposed in case host-side tools also push spans
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: myna-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      myna:
+        condition: service_started
+    restart: unless-stopped

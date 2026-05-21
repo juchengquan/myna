@@ -46,10 +46,13 @@ async def _on_progress(progress: float, total: float | None, message: str | None
     print(f"  [progress] {progress}/{total or '?'}{bar}  {message or ''}")
 
 
-async def run(url: str) -> int:
+async def run(url: str, api_key: str | None = None) -> int:
     print(f"Connecting to MCP server at {url} ...")
+    headers: dict[str, str] | None = None
+    if api_key:
+        headers = {"Authorization": f"Bearer {api_key}"}
     async with (
-        streamablehttp_client(url) as (read, write, _),
+        streamablehttp_client(url, headers=headers) as (read, write, _),
         ClientSession(read, write, logging_callback=_on_log) as session,
     ):
         init = await session.initialize()
@@ -97,8 +100,13 @@ def main() -> None:
         default="http://localhost:8000/mcp/",
         help="Streamable HTTP MCP endpoint (default: %(default)s)",
     )
+    parser.add_argument(
+        "--api-key",
+        default=None,
+        help="Bearer token to send (matches one entry in MYNA_MCP_API_KEYS).",
+    )
     args = parser.parse_args()
-    sys.exit(asyncio.run(run(args.url)))
+    sys.exit(asyncio.run(run(args.url, args.api_key)))
 
 
 if __name__ == "__main__":

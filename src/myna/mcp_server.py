@@ -3,6 +3,7 @@ from __future__ import annotations
 from mcp.server.fastmcp import FastMCP
 
 from myna.config import get_settings
+from myna.observability import instrument
 
 
 def build_mcp() -> FastMCP:
@@ -18,6 +19,7 @@ def build_mcp() -> FastMCP:
         stateless_http=True,
         streamable_http_path="/",
     )
+    instrument(mcp)
     _register_tools(mcp)
     return mcp
 

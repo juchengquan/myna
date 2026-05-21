@@ -27,6 +27,9 @@ The image:
 - [ ] Set `MYNA_ENV=production`.
 - [ ] Set `MYNA_ADMIN_API_KEY` to a high-entropy random value (e.g.
       `openssl rand -hex 32`). Without it, admin endpoints return `500`.
+- [ ] Set `MYNA_MCP_API_KEYS` to a JSON object mapping at least one
+      bearer token to a caller label. Without it, all `/mcp` traffic
+      is rejected with `401`.
 - [ ] Front the service with TLS (reverse proxy / load balancer). Do
       not expose `/mcp` over plaintext HTTP on public networks.
 - [ ] Configure the reverse proxy to **disable response buffering** on
@@ -55,12 +58,17 @@ manage restarts.
 - **Logs**: JSON via `structlog` on stdout. Every line is a single JSON
   object — ship it as-is into your log pipeline (Loki, CloudWatch,
   Datadog, ...).
+- **Audit log**: every MCP tool call emits a structured `tool_call`
+  event with `tool`, `caller`, `status`, `duration_ms`, and a short
+  `args_fingerprint` (SHA-256 prefix). The fingerprint correlates calls
+  without leaking PII or secrets into logs.
+- **Metrics**: Prometheus exposition at `GET /metrics`:
+  - `myna_tool_calls_total{tool, caller, status}` counter
+  - `myna_tool_call_duration_seconds{tool}` histogram
 - **Health**: `GET /api/health` for liveness/readiness probes.
-- **Tracing/metrics**: not built in yet. Hook points:
-  - Add OpenTelemetry FastAPI instrumentation in
-    [`src/myna/main.py`](../src/myna/main.py) `create_app()`.
-  - The unhandled-exception handler in `create_app()` already logs every
-    500 with the request path and exception info.
+- **Tracing**: not built in yet. The natural hook point is OpenTelemetry
+  FastAPI instrumentation in
+  [`src/myna/main.py`](../src/myna/main.py) `create_app()`.
 
 ## Upgrading
 

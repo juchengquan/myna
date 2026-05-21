@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import pytest
 
@@ -36,10 +37,14 @@ async def test_server_info_content() -> None:
 
 
 @pytest.mark.asyncio
-async def test_weather_template_resolves() -> None:
+async def test_weather_template_resolves(mock_weather: Any) -> None:
     mcp = build_mcp()
     contents = list(await mcp.read_resource("weather://locations/Tokyo"))
     assert len(contents) == 1
     payload = json.loads(contents[0].content)
     assert payload["location"] == "Tokyo"
     assert payload["unit"] == "celsius"
+    # Resource shares the same fetch path as the tool, so the mocked
+    # upstream payload flows through unchanged.
+    assert payload["country"] == "Testland"
+    assert payload["temperature"] == 21.5

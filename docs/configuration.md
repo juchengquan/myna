@@ -23,6 +23,9 @@ working directory are loaded automatically.
 | `MYNA_OTEL_ENABLED` | bool | `false` | Toggle for OpenTelemetry tracing. When `false`, the SDK's no-op provider is used everywhere — zero overhead. Flip to `true` to emit spans for HTTP requests and MCP tool calls. |
 | `MYNA_OTEL_SERVICE_NAME` | string | `myna` | Value for the OTel `service.name` resource attribute. |
 | `MYNA_OTEL_EXPORTER_ENDPOINT` | string \| null | `null` | OTLP/HTTP collector endpoint, e.g. `http://otel-collector:4318/v1/traces`. When tracing is enabled and this is unset, spans go to the console exporter (handy for local poking). |
+| `MYNA_OPEN_METEO_GEOCODING_URL` | string | `https://geocoding-api.open-meteo.com` | Base URL for the Open-Meteo geocoding endpoint used by `get_weather`. Override to point at a mock during tests. |
+| `MYNA_OPEN_METEO_FORECAST_URL` | string | `https://api.open-meteo.com` | Base URL for the Open-Meteo forecast endpoint. Override for tests. |
+| `MYNA_OPEN_METEO_TIMEOUT_SECONDS` | float (`> 0`) | `10.0` | Per-request timeout for the two Open-Meteo HTTP calls. |
 
 ## Notes
 

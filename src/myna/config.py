@@ -47,6 +47,28 @@ class Settings(BaseSettings):
         ),
     )
 
+    otel_enabled: bool = Field(
+        default=False,
+        description=(
+            "Toggle for OpenTelemetry tracing. When false (default), all "
+            "tracing setup is skipped and the SDK's no-op provider is used "
+            "— zero overhead. Set to true to record spans for HTTP requests "
+            "and MCP tool calls."
+        ),
+    )
+    otel_service_name: str = Field(
+        default="myna",
+        description="Value for the OTel `service.name` resource attribute.",
+    )
+    otel_exporter_endpoint: str | None = Field(
+        default=None,
+        description=(
+            "OTLP/HTTP collector endpoint, e.g. `http://localhost:4318/v1/traces`. "
+            "When unset and tracing is enabled, spans are exported via the "
+            "console exporter (useful for local debugging)."
+        ),
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

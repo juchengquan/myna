@@ -14,12 +14,15 @@ from myna.mcp_server import build_mcp
 from myna.middleware import MCPAuthMiddleware, RateLimitMiddleware
 from myna.observability import render_metrics
 from myna.rate_limit import RateLimiter
+from myna.tracing import setup_tracing
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
     log = get_logger("myna")
+
+    tracer_provider = setup_tracing(settings)
 
     mcp = build_mcp()
     mcp_app = mcp.streamable_http_app()
@@ -43,6 +46,15 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.state.mcp = mcp
+
+    if tracer_provider is not None:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+        FastAPIInstrumentor.instrument_app(
+            app,
+            tracer_provider=tracer_provider,
+            excluded_urls="api/health,metrics",
+        )
 
     app.include_router(api_router)
     app.mount(settings.mcp_mount_path, mcp_app)

@@ -30,6 +30,16 @@ The image:
 - [ ] Set `MYNA_MCP_API_KEYS` to a JSON object mapping at least one
       bearer token to a caller label. Without it, all `/mcp` traffic
       is rejected with `401`.
+- [ ] Tune `MYNA_MCP_RATE_LIMIT_PER_MINUTE` to a value appropriate for
+      your expected client behavior. The default (`120`) is a sensible
+      starting point; raise it for high-throughput agents, set to `0`
+      only if a downstream load balancer already enforces limits.
+- [ ] If you run more than one replica, note that the token-bucket
+      state is in-process. Each replica enforces the limit
+      independently, so the effective ceiling is roughly
+      `replicas * MYNA_MCP_RATE_LIMIT_PER_MINUTE`. For exact global
+      enforcement, swap in a Redis-backed limiter (the `RateLimiter`
+      interface in `src/myna/rate_limit.py` is intentionally small).
 - [ ] Front the service with TLS (reverse proxy / load balancer). Do
       not expose `/mcp` over plaintext HTTP on public networks.
 - [ ] Configure the reverse proxy to **disable response buffering** on
@@ -65,6 +75,7 @@ manage restarts.
 - **Metrics**: Prometheus exposition at `GET /metrics`:
   - `myna_tool_calls_total{tool, caller, status}` counter
   - `myna_tool_call_duration_seconds{tool}` histogram
+  - `myna_rate_limit_hits_total{key_kind}` counter
 - **Health**: `GET /api/health` for liveness/readiness probes.
 - **Tracing**: not built in yet. The natural hook point is OpenTelemetry
   FastAPI instrumentation in

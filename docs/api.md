@@ -68,6 +68,25 @@ Currently exposes:
 
 - `myna_tool_calls_total{tool, caller, status}` — counter of MCP tool calls.
 - `myna_tool_call_duration_seconds{tool}` — latency histogram per tool.
+- `myna_rate_limit_hits_total{key_kind}` — counter of MCP requests rejected
+  by the rate limiter. `key_kind` is `caller` for authenticated requests or
+  `ip` for anonymous ones.
+
+### `HTTP 429` on `/mcp`
+
+When `MYNA_MCP_RATE_LIMIT_PER_MINUTE` is non-zero and a caller (or IP)
+exceeds its burst budget, requests are rejected with:
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 20
+Content-Type: application/json
+
+{"error": "rate_limited", "retry_after": 19.95}
+```
+
+`Retry-After` is the conservative integer-second hint (per RFC 7231);
+`retry_after` in the JSON body is the precise float estimate.
 
 The `caller` label resolves from `MYNA_MCP_API_KEYS` (see
 [configuration.md](configuration.md)); requests in anonymous-mode dev

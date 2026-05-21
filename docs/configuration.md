@@ -19,6 +19,7 @@ working directory are loaded automatically.
 | `MYNA_MCP_MOUNT_PATH` | string | `/mcp` | URL prefix where the MCP Streamable HTTP app is mounted. |
 | `MYNA_ADMIN_API_KEY` | string \| null | `null` | Bearer token required for `/api/admin/*` outside development. See [api.md](api.md). |
 | `MYNA_MCP_API_KEYS` | JSON object `{token: label}` | `{}` | Bearer tokens accepted on `/mcp` and the human-readable caller label each one resolves to. In development, an empty map allows anonymous access; in staging/production, an empty map blocks all MCP traffic. The label appears in audit logs and the `caller` metric label. Example: `MYNA_MCP_API_KEYS='{"sk-abc":"client-a","sk-def":"client-b"}'`. |
+| `MYNA_MCP_RATE_LIMIT_PER_MINUTE` | int (`>= 0`) | `120` | Per-caller request quota on `/mcp`, expressed as a sustained rate. Token bucket with burst capacity equal to this value. Set to `0` to disable. Keyed by caller label when authenticated, otherwise by client IP. Limited requests receive `HTTP 429` with a `Retry-After` header. |
 
 ## Notes
 

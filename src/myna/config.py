@@ -36,6 +36,17 @@ class Settings(BaseSettings):
         ),
     )
 
+    mcp_rate_limit_per_minute: int = Field(
+        default=120,
+        ge=0,
+        description=(
+            "Per-caller request quota on the MCP endpoint, expressed as a "
+            "sustained rate. The token bucket has a burst capacity equal to "
+            "this value. Set to 0 to disable rate limiting. Keyed by caller "
+            "label when authenticated, otherwise by client IP."
+        ),
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

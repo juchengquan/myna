@@ -41,6 +41,12 @@ TOOL_DURATION = Histogram(
     labelnames=("tool",),
 )
 
+RATE_LIMIT_HITS = Counter(
+    "myna_rate_limit_hits_total",
+    "Number of MCP requests rejected by the rate limiter, by key kind.",
+    labelnames=("key_kind",),
+)
+
 
 def instrument(mcp: FastMCP) -> None:
     """Wrap `mcp._tool_manager.call_tool` to record metrics and audit logs."""

@@ -11,8 +11,9 @@ from myna.api import router as api_router
 from myna.config import get_settings
 from myna.logging_config import configure_logging, get_logger
 from myna.mcp_server import build_mcp
-from myna.middleware import MCPAuthMiddleware
+from myna.middleware import MCPAuthMiddleware, RateLimitMiddleware
 from myna.observability import render_metrics
+from myna.rate_limit import RateLimiter
 
 
 def create_app() -> FastAPI:
@@ -46,7 +47,18 @@ def create_app() -> FastAPI:
     app.include_router(api_router)
     app.mount(settings.mcp_mount_path, mcp_app)
 
-    # Path-scoped auth on the mounted MCP endpoint.
+    # Middleware stack on /mcp. Starlette runs the last `add_middleware`
+    # call first on the way in, so the order below produces:
+    #   request -> MCPAuthMiddleware (sets current_caller)
+    #           -> RateLimitMiddleware (reads current_caller)
+    #           -> mounted FastMCP app
+    rate_limiter = RateLimiter(settings.mcp_rate_limit_per_minute)
+    app.state.rate_limiter = rate_limiter
+    app.add_middleware(
+        RateLimitMiddleware,
+        prefix=settings.mcp_mount_path,
+        limiter=rate_limiter,
+    )
     app.add_middleware(
         MCPAuthMiddleware,
         prefix=settings.mcp_mount_path,

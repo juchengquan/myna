@@ -69,6 +69,38 @@ def register(mcp: FastMCP) -> None:
             return (await client.get(url)).status_code
 ```
 
+## Streaming progress and log events
+
+Long-running tools can stream intermediate updates to the client by
+taking a `Context` parameter. The SDK forwards `ctx.report_progress`
+and `ctx.info` / `ctx.warning` / `ctx.error` calls as MCP notifications
+over the Streamable HTTP transport — clients see them live, before the
+final return value.
+
+```python
+from typing import Any
+from mcp.server.fastmcp import Context, FastMCP
+
+def register(mcp: FastMCP) -> None:
+    @mcp.tool()
+    async def long_task(ctx: Context[Any, Any, Any], items: int) -> str:
+        for i in range(1, items + 1):
+            await ctx.info(f"processing {i}/{items}")
+            await ctx.report_progress(progress=i, total=items)
+            ...
+        return "done"
+```
+
+See [`tools/streaming.py`](../src/myna/tools/streaming.py) for a runnable
+example (`stream_count`) and [`scripts/smoke_test.py`](../scripts/smoke_test.py)
+for a client that registers `logging_callback` and `progress_callback`
+to print the streamed events.
+
+> Tools that declare a `Context` parameter cannot be called in-process
+> via `mcp.call_tool(...)` without an active MCP session. For unit
+> tests, verify registration and input validation only; cover the
+> streaming path through the wire-level smoke test.
+
 ## Errors
 
 Raise normal Python exceptions. They are converted to MCP error responses

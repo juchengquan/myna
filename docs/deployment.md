@@ -68,24 +68,39 @@ manage restarts.
 - **Logs**: JSON via `structlog` on stdout. Every line is a single JSON
   object — ship it as-is into your log pipeline (Loki, CloudWatch,
   Datadog, ...).
-- **Audit log**: every MCP tool call emits a structured `tool_call`
-  event with `tool`, `caller`, `status`, `duration_ms`, and a short
-  `args_fingerprint` (SHA-256 prefix). The fingerprint correlates calls
-  without leaking PII or secrets into logs.
+- **Audit log**: every MCP operation emits a structured event:
+  - `tool_call`     — `tool`, `caller`, `status`, `duration_ms`, `args_fingerprint`
+  - `resource_read` — `uri`, `caller`, `status`, `duration_ms`
+  - `prompt_get`    — `name`, `caller`, `status`, `duration_ms`, `args_fingerprint`
+  The `args_fingerprint` is a SHA-256 prefix of the arguments and lets
+  you correlate calls without leaking PII or secrets into logs.
+  When tracing is enabled, every line also carries `trace_id` and
+  `span_id` of the active span — drop them into your tracing UI to
+  jump from a log line straight to the trace.
 - **Metrics**: Prometheus exposition at `GET /metrics`:
-  - `myna_tool_calls_total{tool, caller, status}` counter
-  - `myna_tool_call_duration_seconds{tool}` histogram
+  - `myna_tool_calls_total{tool, caller, status}` counter +
+    `myna_tool_call_duration_seconds{tool}` histogram
+  - `myna_resource_reads_total{uri, caller, status}` counter +
+    `myna_resource_read_duration_seconds{uri}` histogram
+  - `myna_prompt_gets_total{name, caller, status}` counter +
+    `myna_prompt_get_duration_seconds{name}` histogram
   - `myna_rate_limit_hits_total{key_kind}` counter
 - **Traces** (opt-in): set `MYNA_OTEL_ENABLED=true` and point
   `MYNA_OTEL_EXPORTER_ENDPOINT` at any OTLP/HTTP collector
   (`http://collector:4318/v1/traces`). You get:
     * one span per HTTP request via FastAPI auto-instrumentation
       (`api/health` and `/metrics` are excluded as noise)
-    * one nested `mcp.tool.call <name>` span per tool call, with
-      attributes `mcp.tool.name`, `mcp.caller`, `mcp.args_fingerprint`,
-      `mcp.status`, `mcp.duration_ms`
+    * one nested span per MCP operation:
+      - `mcp.tool.call <name>`
+      - `mcp.resource.read <uri>`
+      - `mcp.prompt.get <name>`
+    * each carries `mcp.caller`, `mcp.status`, `mcp.duration_ms`, plus
+      kind-specific attributes (`mcp.tool.name`, `mcp.resource.uri`,
+      `mcp.prompt.name`, `mcp.args_fingerprint` where applicable)
     * exceptions recorded as span events and the span marked as
       `StatusCode.ERROR`
+    * audit log lines carry the active `trace_id` / `span_id` so logs
+      and traces correlate
   Resource attributes: `service.name`, `service.version`,
   `deployment.environment`.
 - **Health**: `GET /api/health` for liveness/readiness probes.

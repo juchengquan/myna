@@ -101,6 +101,44 @@ to print the streamed events.
 > tests, verify registration and input validation only; cover the
 > streaming path through the wire-level smoke test.
 
+## Sampling — asking the client's LLM
+
+A tool can reverse the usual direction and ask the *client's* LLM to do
+work mid-execution. This is MCP **sampling** (the wire method is
+`sampling/createMessage`). The server holds no model API keys; the
+client decides which model to use and how much it costs.
+
+```python
+from typing import Any
+from mcp.server.fastmcp import Context, FastMCP
+from mcp.types import SamplingMessage, TextContent
+
+def register(mcp: FastMCP) -> None:
+    @mcp.tool()
+    async def summarize(ctx: Context[Any, Any, Any], text: str) -> str:
+        result = await ctx.session.create_message(
+            messages=[
+                SamplingMessage(
+                    role="user",
+                    content=TextContent(type="text", text=f"Summarize: {text}"),
+                )
+            ],
+            max_tokens=256,
+            system_prompt="You are a concise summarizer.",
+        )
+        assert isinstance(result.content, TextContent)
+        return result.content.text
+```
+
+See [`tools/sampling.py`](../src/myna/tools/sampling.py) for the full
+worked example (`summarize_via_sampling`).
+
+**Compatibility caveat:** sampling only works with clients that
+advertise the `sampling` capability in their `initialize` handshake.
+Claude Desktop and Claude Code do; many smaller SDK-based clients
+don't. The example tool surfaces a clear error when the capability is
+missing rather than hanging.
+
 ## Errors
 
 Raise normal Python exceptions. They are converted to MCP error responses

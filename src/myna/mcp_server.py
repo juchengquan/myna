@@ -27,9 +27,10 @@ def build_mcp() -> FastMCP:
 
 
 def _register_tools(mcp: FastMCP) -> None:
-    from myna.tools import example, streaming, weather
+    from myna.tools import example, sampling, streaming, weather
 
     example.register(mcp)
+    sampling.register(mcp)
     streaming.register(mcp)
     weather.register(mcp)
 

@@ -68,6 +68,7 @@ Currently exposes:
 
 - `myna_tool_calls_total{tool, caller, status}` — counter of MCP tool calls.
 - `myna_tool_call_duration_seconds{tool}` — latency histogram per tool.
+- `myna_tool_cache_total{tool, outcome}` — tool result-cache outcomes; `outcome` is `hit` or `miss`. Only emitted for tools decorated with `@cached`.
 - `myna_resource_reads_total{uri, caller, status}` — counter of MCP resource reads.
 - `myna_resource_read_duration_seconds{uri}` — latency histogram per resource URI.
 - `myna_prompt_gets_total{name, caller, status}` — counter of MCP prompt fetches.

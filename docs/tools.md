@@ -69,6 +69,49 @@ def register(mcp: FastMCP) -> None:
             return (await client.get(url)).status_code
 ```
 
+## Caching tool results
+
+Idempotent tools (deterministic inputs → deterministic outputs, no
+side effects) can be wrapped with `@cached(ttl_seconds=...)` to skip
+redundant work for the TTL window. Stack it *inside* `@mcp.tool()`:
+
+```python
+from myna.cache import cached
+from mcp.server.fastmcp import FastMCP
+
+def register(mcp: FastMCP) -> None:
+    @mcp.tool()
+    @cached(ttl_seconds=60)
+    def lookup(symbol: str) -> dict:
+        return _expensive_external_call(symbol)
+```
+
+The decorator:
+
+- Keys cache entries by a SHA-256 of the args + kwargs (no PII in keys
+  needed — the hash is opaque).
+- Records every call as `myna_tool_cache_total{tool, outcome}` where
+  `outcome` is `hit` or `miss`.
+- Adds an `mcp.cache.outcome` attribute to the active `mcp.tool.call`
+  span so you can colour-code traces by cache state.
+- Works for both sync and async tool bodies.
+
+`get_weather` already uses this — call it twice with the same
+`(location, unit)` within 60s and you'll see one miss followed by
+hits, both in `/metrics` and in the trace.
+
+**When NOT to cache:**
+
+- Tools that take a `Context` parameter (sampling, elicitation,
+  streaming). Each call has live-session semantics.
+- Tools with side effects (writes, sends, mutations).
+- Tools whose output depends on hidden state (time, the calling user,
+  external data outside the args).
+
+In-memory only; for cache sharing across replicas, swap the in-memory
+dict in `src/myna/cache.py` for Redis behind the same `TTLCache`
+interface.
+
 ## Streaming progress and log events
 
 Long-running tools can stream intermediate updates to the client by

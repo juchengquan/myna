@@ -6,6 +6,8 @@ from typing import Literal
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
+from myna.cache import cached
+
 Unit = Literal["celsius", "fahrenheit"]
 
 _CONDITIONS = ("sunny", "cloudy", "rainy", "snowy", "windy", "foggy")
@@ -47,11 +49,16 @@ def fake_weather(location: str, unit: Unit = "celsius") -> WeatherReport:
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
+    @cached(ttl_seconds=60)
     def get_weather(location: str, unit: Unit = "celsius") -> WeatherReport:
         """Return a (fake, deterministic) current-weather report for a location.
 
         Useful as a stand-in MCP tool while wiring up clients. The values
         are derived from a hash of the location string so repeated calls
         for the same place return the same result.
+
+        Results are cached for 60s per (location, unit) pair — demonstrates
+        the @cached decorator. See `myna_tool_cache_total{tool="get_weather"}`
+        in Prometheus for hit / miss counts.
         """
         return fake_weather(location, unit)

@@ -89,6 +89,52 @@ async def run(url: str, api_key: str | None = None) -> int:
         )
         _dump("stream_count final", stream_result)
 
+        # --- Resources ---
+        resources = await session.list_resources()
+        templates = await session.list_resource_templates()
+        _dump(
+            "resources/list",
+            {
+                "resources": [r.name for r in resources.resources],
+                "templates": [t.uriTemplate for t in templates.resourceTemplates],
+            },
+        )
+
+        expected_resources = {"server-info"}
+        missing_r = expected_resources - {r.name for r in resources.resources}
+        if missing_r:
+            print(f"\nMISSING expected resources: {sorted(missing_r)}", file=sys.stderr)
+            return 1
+
+        _dump("read myna://server-info", await session.read_resource("myna://server-info"))
+        _dump(
+            "read weather://locations/Tokyo",
+            await session.read_resource("weather://locations/Tokyo"),
+        )
+
+        # --- Prompts ---
+        prompts = await session.list_prompts()
+        _dump("prompts/list", {"prompts": [p.name for p in prompts.prompts]})
+
+        expected_prompts = {"summarize", "weather-report"}
+        missing_p = expected_prompts - {p.name for p in prompts.prompts}
+        if missing_p:
+            print(f"\nMISSING expected prompts: {sorted(missing_p)}", file=sys.stderr)
+            return 1
+
+        _dump(
+            "get_prompt summarize",
+            await session.get_prompt(
+                "summarize", {"text": "MCP lets agents call tools.", "sentences": "1"}
+            ),
+        )
+        _dump(
+            "get_prompt weather-report",
+            await session.get_prompt(
+                "weather-report", {"location": "Berlin", "tone": "playful"}
+            ),
+        )
+
     print("\nSmoke test OK")
     return 0
 

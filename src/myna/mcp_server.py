@@ -21,6 +21,8 @@ def build_mcp() -> FastMCP:
     )
     instrument(mcp)
     _register_tools(mcp)
+    _register_resources(mcp)
+    _register_prompts(mcp)
     return mcp
 
 
@@ -30,3 +32,15 @@ def _register_tools(mcp: FastMCP) -> None:
     example.register(mcp)
     streaming.register(mcp)
     weather.register(mcp)
+
+
+def _register_resources(mcp: FastMCP) -> None:
+    from myna.resources import example as resource_example
+
+    resource_example.register(mcp)
+
+
+def _register_prompts(mcp: FastMCP) -> None:
+    from myna.prompts import example as prompt_example
+
+    prompt_example.register(mcp)

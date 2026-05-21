@@ -36,6 +36,13 @@ Liveness/readiness probe. Always public.
 List the MCP tools currently registered on the server. Useful for
 operator dashboards and registration sanity checks.
 
+The matching endpoints for the other MCP primitives:
+
+- `GET /api/admin/resources` — both static resources and templates,
+  with `uri`, `description`, `mime_type`, and `is_template` per entry.
+- `GET /api/admin/prompts` — registered prompts with their `arguments`
+  (name, description, required).
+
 ```bash
 curl -H "Authorization: Bearer $MYNA_ADMIN_API_KEY" \
      http://localhost:8000/api/admin/tools

@@ -8,6 +8,7 @@ Reference docs for the Myna MCP service backend. The top-level
 | [architecture.md](architecture.md) | High-level design, request flow, package layout |
 | [configuration.md](configuration.md) | All `MYNA_*` environment variables |
 | [tools.md](tools.md) | How to author and register new MCP tools |
+| [resources-and-prompts.md](resources-and-prompts.md) | The other two MCP primitives: resources and prompts |
 | [api.md](api.md) | Admin REST API reference |
 | [client-integration.md](client-integration.md) | Connecting MCP clients to Myna |
 | [deployment.md](deployment.md) | Docker, production checklist, observability |

@@ -68,17 +68,31 @@ class TTLCache:
         async with self._lock:
             self._store[key] = (self._clock() + self.ttl, value)
 
+    async def clear(self) -> None:
+        """Drop all entries. Mostly a test hook."""
+        async with self._lock:
+            self._store.clear()
+
     def __len__(self) -> int:
         return len(self._store)
 
 
-def cached(ttl_seconds: float) -> Callable[[F], F]:
+def cached(
+    ttl_seconds: float,
+    *,
+    label: str | None = None,
+) -> Callable[[F], F]:
     """Decorator: cache an MCP tool's return value for `ttl_seconds`.
 
     Order matters when stacked with `@mcp.tool()` — `@cached` goes on
     the inside, `@mcp.tool()` on the outside, so FastMCP still sees the
     original function's signature (`functools.wraps` carries it
     through via `__wrapped__`).
+
+    The Prometheus counter `myna_tool_cache_total` labels each entry
+    with `tool=<name>`. By default `<name>` is the wrapped function's
+    `__name__`; pass `label="…"` to override (useful when caching at a
+    helper layer rather than on the tool itself).
     """
     if ttl_seconds <= 0:
         raise ValueError("ttl_seconds must be positive")
@@ -88,7 +102,7 @@ def cached(ttl_seconds: float) -> Callable[[F], F]:
 
         cache = TTLCache(ttl_seconds)
         is_async = inspect.iscoroutinefunction(fn)
-        tool_name = fn.__name__
+        tool_name = label or fn.__name__
 
         @wraps(fn)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:

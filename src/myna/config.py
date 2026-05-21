@@ -69,6 +69,28 @@ class Settings(BaseSettings):
         ),
     )
 
+    open_meteo_geocoding_url: str = Field(
+        default="https://geocoding-api.open-meteo.com",
+        description=(
+            "Base URL for the Open-Meteo geocoding API. Used by the "
+            "`get_weather` tool to turn a location name into coordinates. "
+            "Overridable so tests can point at a mock transport."
+        ),
+    )
+    open_meteo_forecast_url: str = Field(
+        default="https://api.open-meteo.com",
+        description=(
+            "Base URL for the Open-Meteo forecast API. Used by the "
+            "`get_weather` tool to fetch current conditions for resolved "
+            "coordinates. Overridable so tests can point at a mock transport."
+        ),
+    )
+    open_meteo_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        description="Per-request timeout for Open-Meteo HTTP calls.",
+    )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

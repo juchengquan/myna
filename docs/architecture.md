@@ -86,7 +86,7 @@ src/myna/
 ├── tools/              # MCP tool modules (one per topic)
 │   ├── example.py      #   ping, echo
 │   ├── streaming.py    #   stream_count (Context-streamed)
-│   └── weather.py      #   get_weather (dummy) + fake_weather helper
+│   └── weather.py      #   get_weather (real, via Open-Meteo)
 ├── resources/          # MCP resource modules
 │   └── example.py      #   myna://server-info, weather://locations/{location}
 └── prompts/            # MCP prompt modules

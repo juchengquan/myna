@@ -1,64 +1,118 @@
 from __future__ import annotations
 
-import hashlib
 from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
 from myna.cache import cached
+from myna.weather_client import (
+    LocationNotFound,
+    WeatherClient,
+    WeatherFetchError,
+    condition_from_wmo,
+)
 
 Unit = Literal["celsius", "fahrenheit"]
 
-_CONDITIONS = ("sunny", "cloudy", "rainy", "snowy", "windy", "foggy")
-
 
 class WeatherReport(BaseModel):
-    location: str
-    temperature: float = Field(description="Current temperature in the requested unit")
+    """Current-weather snapshot for a single location."""
+
+    location: str = Field(description="Resolved place name from the geocoder.")
+    country: str | None = None
+    latitude: float
+    longitude: float
+    temperature: float = Field(description="Current temperature in the requested unit.")
     unit: Unit
-    condition: str
+    condition: str = Field(description="Short human-readable weather condition.")
     humidity_pct: int = Field(ge=0, le=100)
     wind_kph: float
-    note: str = "Dummy data — this tool returns deterministic fake values for testing."
+    as_of: str | None = Field(
+        default=None,
+        description="UTC timestamp the upstream payload was generated.",
+    )
+    source: str = "open-meteo"
 
 
-def fake_weather(location: str, unit: Unit = "celsius") -> WeatherReport:
-    """Deterministic fake weather report keyed by location.
+# Module-level client + per-process cache. The client itself is cheap
+# to construct (no connections held); we keep one instance so tests can
+# swap it via `set_weather_client` without rebuilding the cache layer.
+_client: WeatherClient | None = None
 
-    Shared by the `get_weather` tool and the `weather://locations/{location}`
-    resource so the two surfaces never drift.
+
+def get_weather_client() -> WeatherClient:
+    global _client
+    if _client is None:
+        _client = WeatherClient()
+    return _client
+
+
+def set_weather_client(client: WeatherClient | None) -> None:
+    """Override (or clear) the module-level client. Test hook."""
+    global _client
+    _client = client
+
+
+@cached(ttl_seconds=60, label="weather_open_meteo")
+async def _fetch_celsius(location: str) -> WeatherReport:
+    """Cached celsius fetch, shared by the tool and the templated resource.
+
+    Caching here (rather than on `get_weather`) means the unit-conversion
+    branch doesn't double the upstream traffic when a client asks for
+    both celsius and fahrenheit on the same place.
     """
-    digest = hashlib.sha256(location.strip().lower().encode("utf-8")).digest()
-
-    temp_c = -10 + (digest[0] / 255.0) * 45  # -10..35 C
-    temperature = temp_c if unit == "celsius" else temp_c * 9 / 5 + 32
-    condition = _CONDITIONS[digest[1] % len(_CONDITIONS)]
-    humidity = 20 + (digest[2] % 71)  # 20..90
-    wind = round((digest[3] / 255.0) * 40, 1)  # 0..40 kph
+    try:
+        payload = await get_weather_client().fetch_current(location)
+    except LocationNotFound as exc:
+        raise ValueError(str(exc)) from exc
+    except WeatherFetchError as exc:
+        raise RuntimeError(f"weather fetch failed: {exc}") from exc
 
     return WeatherReport(
-        location=location,
-        temperature=round(temperature, 1),
-        unit=unit,
-        condition=condition,
-        humidity_pct=humidity,
-        wind_kph=wind,
+        location=payload.resolved_name,
+        country=payload.country,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        temperature=round(payload.temperature_celsius, 1),
+        unit="celsius",
+        condition=condition_from_wmo(payload.weather_code),
+        humidity_pct=payload.humidity_pct,
+        wind_kph=payload.wind_kph,
+        as_of=payload.as_of,
     )
+
+
+async def fetch_weather(location: str, unit: Unit = "celsius") -> WeatherReport:
+    """Internal helper shared by the tool and the weather resource."""
+    report = await _fetch_celsius(location)
+    if unit == "fahrenheit":
+        report = report.model_copy(
+            update={
+                "temperature": round(report.temperature * 9 / 5 + 32, 1),
+                "unit": "fahrenheit",
+            }
+        )
+    return report
 
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
-    @cached(ttl_seconds=60)
-    def get_weather(location: str, unit: Unit = "celsius") -> WeatherReport:
-        """Return a (fake, deterministic) current-weather report for a location.
+    async def get_weather(location: str, unit: Unit = "celsius") -> WeatherReport:
+        """Return the current weather for a location, via Open-Meteo.
 
-        Useful as a stand-in MCP tool while wiring up clients. The values
-        are derived from a hash of the location string so repeated calls
-        for the same place return the same result.
-
-        Results are cached for 60s per (location, unit) pair — demonstrates
-        the @cached decorator. See `myna_tool_cache_total{tool="get_weather"}`
+        Looks up coordinates via Open-Meteo's geocoding API, then fetches
+        current temperature, humidity, wind speed, and a coarse weather
+        condition derived from the WMO weather code. Results in celsius
+        are cached for 60 seconds per location, so repeated calls for the
+        same place (in either unit) hit the upstream API at most once
+        per minute. See `myna_tool_cache_total{tool="weather_open_meteo"}`
         in Prometheus for hit / miss counts.
+
+        Args:
+            location: Free-text place name (e.g. "Tokyo", "Berlin, DE").
+            unit: Temperature unit for the returned report.
         """
-        return fake_weather(location, unit)
+        if not location.strip():
+            raise ValueError("location must not be empty")
+        return await fetch_weather(location, unit)

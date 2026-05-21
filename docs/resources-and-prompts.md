@@ -61,7 +61,10 @@ contents = await session.read_resource("weather://locations/Tokyo")
   to choose arguments, or needs to stream progress.
 
 `get_weather` and `weather://locations/{location}` deliberately expose
-the same dummy data both ways as a worked example of the contrast.
+the same real weather data both ways as a worked example of the
+contrast. They share a cached celsius fetch under the hood, so a tool
+call and a resource read for the same place hit the upstream API at
+most once per minute.
 
 ## Prompts
 

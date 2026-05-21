@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from myna.cache import TTLCache, cached
-from myna.mcp_server import build_mcp
 from myna.observability import TOOL_CACHE
 
 
@@ -80,17 +79,32 @@ async def test_cached_decorator_works_with_async_function() -> None:
 
 @pytest.mark.asyncio
 async def test_cached_increments_hit_and_miss_counters() -> None:
-    before_hit = _counter("get_weather", "hit")
-    before_miss = _counter("get_weather", "miss")
+    # Use a self-contained cached function so this test stays
+    # independent of any specific tool's implementation or upstream.
+    @cached(ttl_seconds=60, label="test_counter_tool")
+    def square(x: int) -> int:
+        return x * x
 
-    mcp = build_mcp()
-    # First call: miss + populate.
-    await mcp.call_tool("get_weather", {"location": "Helsinki"})
-    # Second call with same args: hit.
-    await mcp.call_tool("get_weather", {"location": "Helsinki"})
+    before_hit = _counter("test_counter_tool", "hit")
+    before_miss = _counter("test_counter_tool", "miss")
 
-    assert _counter("get_weather", "miss") == before_miss + 1
-    assert _counter("get_weather", "hit") == before_hit + 1
+    await square(5)  # miss
+    await square(5)  # hit
+    await square(5)  # hit
+
+    assert _counter("test_counter_tool", "miss") == before_miss + 1
+    assert _counter("test_counter_tool", "hit") == before_hit + 2
+
+
+@pytest.mark.asyncio
+async def test_cached_label_overrides_function_name() -> None:
+    @cached(ttl_seconds=60, label="custom-label")
+    def f(x: int) -> int:
+        return x
+
+    before = _counter("custom-label", "miss")
+    await f(1)
+    assert _counter("custom-label", "miss") == before + 1
 
 
 def _counter(tool: str, outcome: str) -> float:

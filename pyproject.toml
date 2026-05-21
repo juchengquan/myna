@@ -18,6 +18,10 @@ dependencies = [
     "structlog>=24.1",
     "httpx>=0.27",
     "prometheus-client>=0.20",
+    "opentelemetry-api>=1.25",
+    "opentelemetry-sdk>=1.25",
+    "opentelemetry-exporter-otlp-proto-http>=1.25",
+    "opentelemetry-instrumentation-fastapi>=0.46b0",
 ]
 
 [project.scripts]

@@ -76,10 +76,19 @@ manage restarts.
   - `myna_tool_calls_total{tool, caller, status}` counter
   - `myna_tool_call_duration_seconds{tool}` histogram
   - `myna_rate_limit_hits_total{key_kind}` counter
+- **Traces** (opt-in): set `MYNA_OTEL_ENABLED=true` and point
+  `MYNA_OTEL_EXPORTER_ENDPOINT` at any OTLP/HTTP collector
+  (`http://collector:4318/v1/traces`). You get:
+    * one span per HTTP request via FastAPI auto-instrumentation
+      (`api/health` and `/metrics` are excluded as noise)
+    * one nested `mcp.tool.call <name>` span per tool call, with
+      attributes `mcp.tool.name`, `mcp.caller`, `mcp.args_fingerprint`,
+      `mcp.status`, `mcp.duration_ms`
+    * exceptions recorded as span events and the span marked as
+      `StatusCode.ERROR`
+  Resource attributes: `service.name`, `service.version`,
+  `deployment.environment`.
 - **Health**: `GET /api/health` for liveness/readiness probes.
-- **Tracing**: not built in yet. The natural hook point is OpenTelemetry
-  FastAPI instrumentation in
-  [`src/myna/main.py`](../src/myna/main.py) `create_app()`.
 
 ## Upgrading
 

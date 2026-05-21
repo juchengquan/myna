@@ -24,10 +24,14 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.tools.tool_manager import ToolManager
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 
 from myna.context import current_caller
 from myna.logging_config import get_logger
+
+_TRACER = trace.get_tracer("myna.mcp")
 
 TOOL_CALLS = Counter(
     "myna_tool_calls_total",
@@ -61,30 +65,43 @@ def instrument(mcp: FastMCP) -> None:
         convert_result: bool = False,
     ) -> Any:
         caller = current_caller.get()
-        start = time.monotonic()
-        status = "ok"
-        try:
-            return await original(
-                name,
-                arguments,
-                context=context,
-                convert_result=convert_result,
-            )
-        except Exception:
-            status = "error"
-            raise
-        finally:
-            duration = time.monotonic() - start
-            TOOL_DURATION.labels(tool=name).observe(duration)
-            TOOL_CALLS.labels(tool=name, caller=caller, status=status).inc()
-            log.info(
-                "tool_call",
-                tool=name,
-                caller=caller,
-                status=status,
-                duration_ms=round(duration * 1000, 2),
-                args_fingerprint=_fingerprint(arguments),
-            )
+        args_fp = _fingerprint(arguments)
+        with _TRACER.start_as_current_span(
+            f"mcp.tool.call {name}",
+            attributes={
+                "mcp.tool.name": name,
+                "mcp.caller": caller,
+                "mcp.args_fingerprint": args_fp,
+            },
+        ) as span:
+            start = time.monotonic()
+            status = "ok"
+            try:
+                return await original(
+                    name,
+                    arguments,
+                    context=context,
+                    convert_result=convert_result,
+                )
+            except Exception as exc:
+                status = "error"
+                span.record_exception(exc)
+                span.set_status(Status(StatusCode.ERROR, str(exc)))
+                raise
+            finally:
+                duration = time.monotonic() - start
+                TOOL_DURATION.labels(tool=name).observe(duration)
+                TOOL_CALLS.labels(tool=name, caller=caller, status=status).inc()
+                span.set_attribute("mcp.status", status)
+                span.set_attribute("mcp.duration_ms", round(duration * 1000, 2))
+                log.info(
+                    "tool_call",
+                    tool=name,
+                    caller=caller,
+                    status=status,
+                    duration_ms=round(duration * 1000, 2),
+                    args_fingerprint=args_fp,
+                )
 
     tool_manager.call_tool = call_tool  # type: ignore[method-assign]
 

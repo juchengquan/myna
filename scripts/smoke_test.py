@@ -24,6 +24,7 @@ from typing import Any
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
+from mcp.types import LoggingMessageNotificationParams
 
 
 def _dump(label: str, value: Any) -> None:
@@ -33,11 +34,23 @@ def _dump(label: str, value: Any) -> None:
     print(json.dumps(value, indent=2, default=str))
 
 
+async def _on_log(params: LoggingMessageNotificationParams) -> None:
+    print(f"  [log/{params.level}] {params.data}")
+
+
+async def _on_progress(progress: float, total: float | None, message: str | None) -> None:
+    bar = ""
+    if total:
+        pct = int(100 * progress / total)
+        bar = f" [{pct:>3}%]"
+    print(f"  [progress] {progress}/{total or '?'}{bar}  {message or ''}")
+
+
 async def run(url: str) -> int:
     print(f"Connecting to MCP server at {url} ...")
     async with (
         streamablehttp_client(url) as (read, write, _),
-        ClientSession(read, write) as session,
+        ClientSession(read, write, logging_callback=_on_log) as session,
     ):
         init = await session.initialize()
         _dump("initialize", init)
@@ -46,7 +59,7 @@ async def run(url: str) -> int:
         tool_names = [t.name for t in tools.tools]
         _dump("tools/list", {"tools": tool_names})
 
-        expected = {"ping", "echo", "get_weather"}
+        expected = {"ping", "echo", "get_weather", "stream_count"}
         missing = expected - set(tool_names)
         if missing:
             print(f"\nMISSING expected tools: {sorted(missing)}", file=sys.stderr)
@@ -64,6 +77,14 @@ async def run(url: str) -> int:
                 "get_weather", {"location": "Tokyo", "unit": "fahrenheit"}
             ),
         )
+
+        print("\n=== call stream_count (streaming progress + logs below) ===")
+        stream_result = await session.call_tool(
+            "stream_count",
+            {"n": 5, "delay_ms": 100},
+            progress_callback=_on_progress,
+        )
+        _dump("stream_count final", stream_result)
 
     print("\nSmoke test OK")
     return 0

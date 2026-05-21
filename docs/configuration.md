@@ -18,6 +18,7 @@ working directory are loaded automatically.
 | `MYNA_MCP_SERVER_NAME` | string | `myna` | Server name advertised to MCP clients during `initialize`. |
 | `MYNA_MCP_MOUNT_PATH` | string | `/mcp` | URL prefix where the MCP Streamable HTTP app is mounted. |
 | `MYNA_ADMIN_API_KEY` | string \| null | `null` | Bearer token required for `/api/admin/*` outside development. See [api.md](api.md). |
+| `MYNA_MCP_API_KEYS` | JSON object `{token: label}` | `{}` | Bearer tokens accepted on `/mcp` and the human-readable caller label each one resolves to. In development, an empty map allows anonymous access; in staging/production, an empty map blocks all MCP traffic. The label appears in audit logs and the `caller` metric label. Example: `MYNA_MCP_API_KEYS='{"sk-abc":"client-a","sk-def":"client-b"}'`. |
 
 ## Notes
 

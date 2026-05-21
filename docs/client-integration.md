@@ -5,6 +5,16 @@ over **Streamable HTTP** at the URL set by `MYNA_MCP_MOUNT_PATH`
 (default `/mcp`). The endpoint URL clients should use is e.g.
 `http://localhost:8000/mcp/`.
 
+## Authentication
+
+In `staging`/`production`, every `/mcp` request must carry a bearer
+token from `MYNA_MCP_API_KEYS` (see [configuration.md](configuration.md)).
+Pass it via the `Authorization: Bearer <token>` header — most clients
+accept a custom-headers dict on the transport constructor.
+
+In `development`, an empty `MYNA_MCP_API_KEYS` allows anonymous access
+so local iteration is friction-free.
+
 ## Python (official SDK)
 
 ```python
@@ -14,8 +24,11 @@ from mcp.client.streamable_http import streamablehttp_client
 
 
 async def main() -> None:
+    headers = {"Authorization": "Bearer sk-abc"}
     async with (
-        streamablehttp_client("http://localhost:8000/mcp/") as (read, write, _),
+        streamablehttp_client(
+            "http://localhost:8000/mcp/", headers=headers,
+        ) as (read, write, _),
         ClientSession(read, write) as session,
     ):
         await session.initialize()

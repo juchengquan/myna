@@ -51,6 +51,21 @@ curl -H "Authorization: Bearer $MYNA_ADMIN_API_KEY" \
 }
 ```
 
+### `GET /metrics`
+
+Prometheus exposition endpoint. Public (no auth) — designed to be scraped
+by a Prometheus server inside your network. Place it behind a firewall or
+a path-based ACL on your reverse proxy if your perimeter requires it.
+
+Currently exposes:
+
+- `myna_tool_calls_total{tool, caller, status}` — counter of MCP tool calls.
+- `myna_tool_call_duration_seconds{tool}` — latency histogram per tool.
+
+The `caller` label resolves from `MYNA_MCP_API_KEYS` (see
+[configuration.md](configuration.md)); requests in anonymous-mode dev
+report `caller="anonymous"`.
+
 ## OpenAPI
 
 The full schema is auto-generated and served at:

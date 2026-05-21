@@ -86,6 +86,12 @@ RATE_LIMIT_HITS = Counter(
     labelnames=("key_kind",),
 )
 
+TOOL_CACHE = Counter(
+    "myna_tool_cache_total",
+    "Tool result cache outcomes, by tool / outcome (hit | miss).",
+    labelnames=("tool", "outcome"),
+)
+
 _log = get_logger("myna.audit")
 
 

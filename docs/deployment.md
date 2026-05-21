@@ -80,6 +80,8 @@ manage restarts.
 - **Metrics**: Prometheus exposition at `GET /metrics`:
   - `myna_tool_calls_total{tool, caller, status}` counter +
     `myna_tool_call_duration_seconds{tool}` histogram
+  - `myna_tool_cache_total{tool, outcome}` counter (only for tools
+    decorated with `@cached`)
   - `myna_resource_reads_total{uri, caller, status}` counter +
     `myna_resource_read_duration_seconds{uri}` histogram
   - `myna_prompt_gets_total{name, caller, status}` counter +

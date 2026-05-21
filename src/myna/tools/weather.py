@@ -21,6 +21,30 @@ class WeatherReport(BaseModel):
     note: str = "Dummy data — this tool returns deterministic fake values for testing."
 
 
+def fake_weather(location: str, unit: Unit = "celsius") -> WeatherReport:
+    """Deterministic fake weather report keyed by location.
+
+    Shared by the `get_weather` tool and the `weather://locations/{location}`
+    resource so the two surfaces never drift.
+    """
+    digest = hashlib.sha256(location.strip().lower().encode("utf-8")).digest()
+
+    temp_c = -10 + (digest[0] / 255.0) * 45  # -10..35 C
+    temperature = temp_c if unit == "celsius" else temp_c * 9 / 5 + 32
+    condition = _CONDITIONS[digest[1] % len(_CONDITIONS)]
+    humidity = 20 + (digest[2] % 71)  # 20..90
+    wind = round((digest[3] / 255.0) * 40, 1)  # 0..40 kph
+
+    return WeatherReport(
+        location=location,
+        temperature=round(temperature, 1),
+        unit=unit,
+        condition=condition,
+        humidity_pct=humidity,
+        wind_kph=wind,
+    )
+
+
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
     def get_weather(location: str, unit: Unit = "celsius") -> WeatherReport:
@@ -30,19 +54,4 @@ def register(mcp: FastMCP) -> None:
         are derived from a hash of the location string so repeated calls
         for the same place return the same result.
         """
-        digest = hashlib.sha256(location.strip().lower().encode("utf-8")).digest()
-
-        temp_c = -10 + (digest[0] / 255.0) * 45  # -10..35 C
-        temperature = temp_c if unit == "celsius" else temp_c * 9 / 5 + 32
-        condition = _CONDITIONS[digest[1] % len(_CONDITIONS)]
-        humidity = 20 + (digest[2] % 71)  # 20..90
-        wind = round((digest[3] / 255.0) * 40, 1)  # 0..40 kph
-
-        return WeatherReport(
-            location=location,
-            temperature=round(temperature, 1),
-            unit=unit,
-            condition=condition,
-            humidity_pct=humidity,
-            wind_kph=wind,
-        )
+        return fake_weather(location, unit)

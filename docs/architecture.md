@@ -50,9 +50,9 @@ HTTP client ── /api ──▶│   router ── myna.api (health, admin, ..
                                        │
                               app.state.mcp = FastMCP
                               │
-                              ├── tools (myna.tools.*)
-                              ├── resources (future)
-                              └── prompts (future)
+                              ├── tools     (myna.tools.*)
+                              ├── resources (myna.resources.*)
+                              └── prompts   (myna.prompts.*)
 ```
 
 The boundary is the `app.mount(...)` call in `src/myna/main.py`:
@@ -83,9 +83,14 @@ src/myna/
 │   ├── __init__.py     #   /api router aggregation
 │   ├── health.py       #   GET /api/health
 │   └── admin.py        #   GET /api/admin/tools (bearer auth)
-└── tools/              # MCP tool modules (one per topic)
-    ├── example.py      #   ping, echo
-    └── weather.py      #   get_weather (dummy)
+├── tools/              # MCP tool modules (one per topic)
+│   ├── example.py      #   ping, echo
+│   ├── streaming.py    #   stream_count (Context-streamed)
+│   └── weather.py      #   get_weather (dummy) + fake_weather helper
+├── resources/          # MCP resource modules
+│   └── example.py      #   myna://server-info, weather://locations/{location}
+└── prompts/            # MCP prompt modules
+    └── example.py      #   summarize, weather-report
 ```
 
 ## Key design choices

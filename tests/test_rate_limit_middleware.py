@@ -64,7 +64,7 @@ def test_zero_disables_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_two_callers_have_independent_quotas(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MYNA_ENV", "production")
     monkeypatch.setenv("MYNA_ADMIN_API_KEY", "x")
-    monkeypatch.setenv("MYNA_MCP_API_KEYS", '{"sk-a":"client-a","sk-b":"client-b"}')
+    monkeypatch.setenv("MYNA_MCP_API_KEYS", "client-a:sk-a,client-b:sk-b")
     monkeypatch.setenv("MYNA_MCP_RATE_LIMIT_PER_MINUTE", "2")
 
     with TestClient(create_app()) as client:

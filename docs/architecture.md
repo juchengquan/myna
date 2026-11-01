@@ -83,6 +83,7 @@ src/myna/
 ├── logging_config.py   # structlog JSON logging
 ├── mcp_server.py       # build_mcp() + tool registration
 ├── middleware.py       # ASGI auth + rate limiting, scoped to /mcp
+├── verifiers.py        # turns a bearer token into the caller
 ├── rate_limit.py       # token bucket
 ├── cache.py            # @cached TTL decorator
 ├── context.py          # current_caller ContextVar

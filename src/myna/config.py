@@ -1,10 +1,52 @@
 from __future__ import annotations
 
+import re
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+_KEY_NAME = re.compile(r"[A-Za-z0-9_-]+")
+_KEY_VALUE = re.compile(r"[\x21-\x7e]+")
+# Means an unauthenticated caller, in metrics and rate limiting.
+_RESERVED_KEY_NAMES = {"anonymous"}
+
+
+def parse_mcp_api_keys(raw: str) -> dict[str, str]:
+    """Parse `name:key,name:key` into a `{key: name}` map.
+
+    A name may repeat, so a client can hold two keys during rotation. Errors
+    identify an entry by its position and never include its text, because a
+    malformed entry may be a real key.
+    """
+    raw = raw.strip()
+    if not raw:
+        return {}
+    if raw.startswith("{"):
+        raise ValueError(
+            "MYNA_MCP_API_KEYS no longer accepts JSON. Use name:key,name:key, "
+            "for example client-a:sk-abc,client-b:sk-def"
+        )
+
+    keys: dict[str, str] = {}
+    for position, entry in enumerate(raw.split(","), start=1):
+        name, separator, key = entry.strip().partition(":")
+        problem = None
+        if not separator:
+            problem = "is missing the colon between name and key"
+        elif not _KEY_NAME.fullmatch(name):
+            problem = "has a name that isn't only letters, digits, - and _"
+        elif name in _RESERVED_KEY_NAMES:
+            problem = f"uses the reserved name {name!r}"
+        elif not _KEY_VALUE.fullmatch(key):
+            problem = "has an empty key, or a key containing spaces or non-ASCII characters"
+        elif key in keys:
+            problem = "repeats a key from an earlier entry"
+        if problem:
+            raise ValueError(f"MYNA_MCP_API_KEYS entry {position} {problem}")
+        keys[key] = name
+    return keys
 
 
 class Settings(BaseSettings):
@@ -13,6 +55,9 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # Validation errors would otherwise print the rejected value, which
+        # can be a secret.
+        hide_input_in_errors=True,
     )
 
     env: Literal["development", "staging", "production"] = "development"
@@ -73,16 +118,22 @@ class Settings(BaseSettings):
         ),
     )
 
-    mcp_api_keys: dict[str, str] = Field(
+    mcp_api_keys: Annotated[dict[str, str], NoDecode] = Field(
         default_factory=dict,
         description=(
-            "Bearer tokens accepted on the MCP endpoint. JSON object mapping "
-            "key -> caller label, e.g. "
-            '`MYNA_MCP_API_KEYS=\'{"sk-abc":"client-a"}\'`. In development, '
-            "an empty map means anonymous access is allowed; in staging/"
-            "production an empty map blocks all MCP traffic."
+            "Bearer tokens accepted on the MCP endpoint, as `name:key,name:key`, "
+            "e.g. `MYNA_MCP_API_KEYS=client-a:sk-abc,client-b:sk-def`. The name is "
+            "the caller in metrics and audit logs. A name may repeat, so a client "
+            "can hold two keys during rotation. In development, no keys means "
+            "anonymous access is allowed; in staging/production it blocks all MCP "
+            "traffic."
         ),
     )
+
+    @field_validator("mcp_api_keys", mode="before")
+    @classmethod
+    def _parse_mcp_api_keys(cls, value: object) -> object:
+        return parse_mcp_api_keys(value) if isinstance(value, str) else value
 
     mcp_rate_limit_per_minute: int = Field(
         default=120,

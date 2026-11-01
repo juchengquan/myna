@@ -88,7 +88,6 @@ src/myna/
 ├── context.py          # current_caller ContextVar
 ├── observability.py    # metrics, audit log, spans for all MCP primitives
 ├── tracing.py          # OpenTelemetry provider + exporter setup
-├── weather_client.py   # Open-Meteo HTTP client
 ├── api/                # admin REST surface
 │   ├── __init__.py     #   /api router aggregation
 │   ├── auth.py         #   bearer checks for admin routes and /metrics
@@ -97,12 +96,14 @@ src/myna/
 ├── tools/              # MCP tool modules (one per topic)
 │   ├── example.py      #   ping, echo
 │   ├── streaming.py    #   stream_count (Context-streamed)
-│   ├── elicitation.py  #   confirm_action
-│   └── weather.py      #   get_weather (real, via Open-Meteo)
+│   └── elicitation.py  #   confirm_action
 ├── resources/          # MCP resource modules
-│   └── example.py      #   myna://server-info, weather://locations/{location}
-└── prompts/            # MCP prompt modules
-    └── example.py      #   summarize, weather-report
+│   └── example.py      #   myna://server-info
+├── prompts/            # MCP prompt modules
+│   └── example.py      #   summarize
+└── weather/            # example integration, removable as one unit
+    ├── client.py       #   Open-Meteo HTTP client and its settings
+    └── server.py       #   get_weather, weather://locations/{location}, weather-report
 ```
 
 ## Key design choices

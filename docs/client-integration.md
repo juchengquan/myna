@@ -92,11 +92,14 @@ Tested with Claude Code 2.1.316 against a local server:
 - It connects with protocol 2026-07-28 and has no session, in either server
   mode. Metrics and audit lines show the caller from the bearer token.
 - `ping`, `get_weather`, and `stream_count` work.
-- `confirm_action` reaches the client. In `claude -p` nobody can answer, so
-  it comes back as cancelled.
+- In an interactive session, `confirm_action` shows a form with the message and
+  both fields. Accepting, declining, and cancelling each return the matching
+  result, and the form won't accept a blank `Confirmed`. To fill in `Note`, type
+  on its row. Pressing Enter there skips to `Accept`.
+- In `claude -p` nobody can answer, so `confirm_action` comes back as cancelled.
 
-A person answering a `confirm_action` prompt and Claude Desktop haven't been
-tested.
+The form test was driven by simulated keystrokes rather than a person, with
+permission prompts bypassed. Claude Desktop hasn't been tested.
 
 ## Notes
 

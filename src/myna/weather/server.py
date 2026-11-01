@@ -3,11 +3,12 @@ from __future__ import annotations
 from typing import Literal
 
 from mcp.server.mcpserver import MCPServer
-from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ResourceError, ResourceNotFoundError, ToolError
+from mcp.server.mcpserver.prompts.base import Message, UserMessage
 from pydantic import BaseModel, Field
 
 from myna.cache import cached
-from myna.weather_client import (
+from myna.weather.client import (
     LocationNotFound,
     WeatherClient,
     WeatherFetchError,
@@ -117,3 +118,41 @@ def register(mcp: MCPServer) -> None:
             raise ToolError(str(exc)) from exc
         except WeatherFetchError as exc:
             raise ToolError(f"weather fetch failed: {exc}") from exc
+
+    @mcp.resource(
+        "weather://locations/{location}",
+        name="weather-by-location",
+        mime_type="application/json",
+        description=(
+            "Current weather for a location via Open-Meteo, mirroring the "
+            "`get_weather` tool. Use the `get_weather` tool when you need "
+            "to control the temperature unit; this resource always returns "
+            "celsius. Shares the upstream cache with the tool — repeated "
+            "reads for the same place hit the API at most once per minute."
+        ),
+    )
+    async def weather_resource(location: str) -> str:
+        try:
+            report = await fetch_weather(location)
+        except LocationNotFound as exc:
+            raise ResourceNotFoundError(str(exc)) from exc
+        except WeatherFetchError as exc:
+            raise ResourceError(f"weather fetch failed: {exc}") from exc
+        return report.model_dump_json(indent=2)
+
+    @mcp.prompt(
+        name="weather-report",
+        description=(
+            "Produce a short, human-friendly weather summary for a location, "
+            "given a structured report from the `get_weather` tool."
+        ),
+    )
+    def weather_report(location: str, tone: str = "neutral") -> list[Message]:
+        return [
+            UserMessage(
+                f"Use the `get_weather` tool to fetch the current conditions for "
+                f"{location!r}, then write a {tone} one-paragraph summary suitable "
+                "for a daily briefing. Call out anything unusual (very hot, very "
+                "cold, severe weather)."
+            )
+        ]

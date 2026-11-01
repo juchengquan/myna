@@ -40,7 +40,8 @@ def build_mcp_app(mcp: MCPServer) -> Starlette:
 
 
 def _register_tools(mcp: MCPServer) -> None:
-    from myna.tools import elicitation, example, streaming, weather
+    from myna import weather
+    from myna.tools import elicitation, example, streaming
 
     example.register(mcp)
     streaming.register(mcp)

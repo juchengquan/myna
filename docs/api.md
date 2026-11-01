@@ -90,7 +90,9 @@ Currently exposes:
 
 `status` is `ok`, `error`, or `input_required`. On a 2026-07-28 connection, a
 tool that asks the client a question records `input_required` for that round,
-then `ok` or `error` when it's called again with the answer.
+then `ok` or `error` when it's called again with the answer. `ok` means the call
+completed, not that the user approved: a declined or cancelled `confirm_action`
+also records `ok`, and the answer is only in the tool's reply.
 
 - `myna_rate_limit_hits_total{key_kind}` — counter of MCP requests rejected
   by the rate limiter. `key_kind` is `caller` for authenticated requests,

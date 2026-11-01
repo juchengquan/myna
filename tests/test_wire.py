@@ -127,7 +127,7 @@ async def test_tools_are_offered_in_both_modes(
     async with _session(url) as session:
         tools = {t.name for t in (await session.list_tools()).tools}
 
-    assert {"ping", "stream_count", "get_weather", "confirm_action"} <= tools
+    assert {"ping", "stream_count", "confirm_action"} <= tools
 
 
 async def test_stateless_legacy_elicitation_fails_without_hanging(stateless_url: str) -> None:

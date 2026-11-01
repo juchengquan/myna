@@ -18,8 +18,6 @@ def test_list_resources(client: TestClient) -> None:
     by_name = {r["name"]: r for r in body["resources"]}
     assert "server-info" in by_name
     assert by_name["server-info"]["is_template"] is False
-    assert "weather-by-location" in by_name
-    assert by_name["weather-by-location"]["is_template"] is True
 
 
 def test_list_prompts(client: TestClient) -> None:

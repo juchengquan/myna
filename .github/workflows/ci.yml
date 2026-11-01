@@ -78,6 +78,27 @@ jobs:
           echo "POST /mcp/ returned $status"
           test "$status" = 200
 
+  template:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Run the README's new-server steps
+        run: |
+          sed -n '/^## Start a new server/,/^## Configuration/p' README.md \
+            | awk '/^```bash$/{f=1;next} /^```$/{f=0} f' > "$RUNNER_TEMP/start.sh"
+          bash -ex "$RUNNER_TEMP/start.sh"
+
+      - name: Check the result
+        run: |
+          test -z "$(git grep -il myna)"
+          uv run ruff check .
+          uv run mypy src
+
   audit:
     runs-on: ubuntu-latest
     steps:

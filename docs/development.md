@@ -26,7 +26,7 @@ Useful URLs:
 
 ```bash
 uv run pytest                              # all tests
-uv run pytest -v tests/test_weather_tool.py
+uv run pytest -v tests/weather/test_tool.py
 uv run pytest --cov=myna --cov-report=term-missing
 ```
 
@@ -102,6 +102,10 @@ rather than downloading a different Python.
 
 A `docker` job builds the image, starts it with production settings, and
 checks `/api/health` and an authenticated `/mcp` request.
+
+A `template` job runs the commands in the README's "Start a new server"
+section as written, then checks that the result passes the tests, ruff, and
+mypy.
 
 A separate `audit` job runs `pip-audit` against the locked runtime
 dependencies, on every push and PR and weekly, because advisories appear

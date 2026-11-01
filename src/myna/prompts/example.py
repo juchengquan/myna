@@ -11,7 +11,6 @@ Each module exposes a `register(mcp)` function and is wired up from
 from __future__ import annotations
 
 from mcp.server.mcpserver import MCPServer
-from mcp.server.mcpserver.prompts.base import Message, UserMessage
 
 
 def register(mcp: MCPServer) -> None:
@@ -25,20 +24,3 @@ def register(mcp: MCPServer) -> None:
             "Be concise and preserve key facts.\n\n"
             f"---\n{text}\n---"
         )
-
-    @mcp.prompt(
-        name="weather-report",
-        description=(
-            "Produce a short, human-friendly weather summary for a location, "
-            "given a structured report from the `get_weather` tool."
-        ),
-    )
-    def weather_report(location: str, tone: str = "neutral") -> list[Message]:
-        return [
-            UserMessage(
-                f"Use the `get_weather` tool to fetch the current conditions for "
-                f"{location!r}, then write a {tone} one-paragraph summary suitable "
-                "for a daily briefing. Call out anything unusual (very hot, very "
-                "cold, severe weather)."
-            )
-        ]

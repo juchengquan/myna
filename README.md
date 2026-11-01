@@ -72,12 +72,28 @@ uv lock
 uv run pytest
 ```
 
+To remove the weather example, which is the only thing that calls an outside
+API:
+
+```bash
+rm -r "src/$NAME/weather" tests/weather
+perl -ni -e 'print unless /weather/' "src/$NAME/mcp_server.py"
+perl -ni -e 'print unless /OPEN_METEO|Open-Meteo/' .env.example
+uv run pytest
+```
+
+CI runs both of these blocks on every PR, so they should keep working.
+
 Then:
 
-- Check the repo URL in the weather client's `User-Agent`, which the command
-  also rewrites, along with this section.
-- Delete the example tools you don't need from `tools/`, along with their lines
-  in `mcp_server.py`, their tests, and their checks in `scripts/smoke_test.py`.
+- Check the repo URL in the weather client's `User-Agent`, if you kept it. The
+  rename also rewrites it, along with this section.
+- Remove other examples as you go. Each is a module in `tools/`, a line in
+  `mcp_server.py`, and its tests. `stream_count` and `confirm_action` also have
+  cases in `tests/test_wire.py` and checks in `scripts/smoke_test.py`, and
+  `summarize` is listed in `scripts/smoke_test.py`.
+- Update the docs, which still use weather in their examples, along with the
+  docstrings in `cache.py` and `resources/example.py`.
 - Note the license. The code is GPL-3.0, which generally applies to anything
   you distribute that's built on it.
 
@@ -109,11 +125,11 @@ src/myna/
   cache.py           # @cached TTL decorator
   observability.py   # metrics, audit log, spans
   tracing.py         # OpenTelemetry setup
-  weather_client.py  # Open-Meteo HTTP client
   api/               # admin REST endpoints
   tools/             # MCP tool modules
   resources/         # MCP resource modules
   prompts/           # MCP prompt modules
+  weather/           # example integration: client, tool, resource, prompt
 tests/               # pytest suite
 ```
 

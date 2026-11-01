@@ -22,10 +22,15 @@ dependencies = [
     "opentelemetry-sdk>=1.25",
     "opentelemetry-exporter-otlp-proto-http>=1.25",
     "opentelemetry-instrumentation-fastapi>=0.46b0",
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.13",
+    "aiosqlite>=0.20",
+    "asyncpg>=0.30",
 ]
 
 [project.scripts]
 myna = "myna.__main__:main"
+myna-migrate = "myna.keys.migrate:main"
 
 [dependency-groups]
 dev = [

@@ -84,6 +84,7 @@ src/myna/
 ├── mcp_server.py       # build_mcp() + tool registration
 ├── middleware.py       # ASGI auth + rate limiting, scoped to /mcp
 ├── verifiers.py        # turns a bearer token into the caller
+├── keys/               # optional database keys: store, verifier, routes, migrations
 ├── rate_limit.py       # token bucket
 ├── cache.py            # @cached TTL decorator
 ├── context.py          # current_caller ContextVar

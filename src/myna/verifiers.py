@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import secrets
 
-from mcp.server.auth.provider import AccessToken
+from mcp.server.auth.provider import AccessToken, TokenVerifier
+
+
+class VerifierUnavailable(Exception):
+    """A verifier can't reach what it checks against, so the caller gets a 503."""
 
 
 class StaticKeyVerifier:
@@ -30,3 +34,17 @@ class StaticKeyVerifier:
         if name is None:
             return None
         return AccessToken(token=token, client_id=name, scopes=[])
+
+
+class ChainVerifier:
+    """Tries each verifier in order and accepts the first match."""
+
+    def __init__(self, *verifiers: TokenVerifier) -> None:
+        self._verifiers = verifiers
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        for verifier in self._verifiers:
+            access_token = await verifier.verify_token(token)
+            if access_token is not None:
+                return access_token
+        return None

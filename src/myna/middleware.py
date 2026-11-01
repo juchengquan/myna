@@ -32,6 +32,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from myna.context import ANONYMOUS, current_caller
 from myna.observability import RATE_LIMIT_HITS
 from myna.rate_limit import RateLimiter
+from myna.verifiers import VerifierUnavailable
 
 
 class MountPathMiddleware:
@@ -73,7 +74,12 @@ class MCPAuthMiddleware:
             await self._app(scope, receive, send)
             return
 
-        caller = await self._authenticate(scope)
+        try:
+            caller = await self._authenticate(scope)
+        except VerifierUnavailable:
+            await _send_json(send, 503, {"error": "auth_unavailable"})
+            return
+
         if caller is None:
             # Only failures spend these tokens, so a valid key still works
             # from an address that is being throttled.

@@ -4,13 +4,22 @@ import re
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 _KEY_NAME = re.compile(r"[A-Za-z0-9_-]+")
 _KEY_VALUE = re.compile(r"[\x21-\x7e]+")
 # Means an unauthenticated caller, in metrics and rate limiting.
 _RESERVED_KEY_NAMES = {"anonymous"}
+
+
+def validate_key_name(name: str) -> str | None:
+    """Return what's wrong with a caller name, or None if it's fine."""
+    if not _KEY_NAME.fullmatch(name):
+        return "isn't only letters, digits, - and _"
+    if name in _RESERVED_KEY_NAMES:
+        return f"uses the reserved name {name!r}"
+    return None
 
 
 def parse_mcp_api_keys(raw: str) -> dict[str, str]:
@@ -35,10 +44,8 @@ def parse_mcp_api_keys(raw: str) -> dict[str, str]:
         problem = None
         if not separator:
             problem = "is missing the colon between name and key"
-        elif not _KEY_NAME.fullmatch(name):
-            problem = "has a name that isn't only letters, digits, - and _"
-        elif name in _RESERVED_KEY_NAMES:
-            problem = f"uses the reserved name {name!r}"
+        elif name_problem := validate_key_name(name):
+            problem = f"has a name that {name_problem}"
         elif not _KEY_VALUE.fullmatch(key):
             problem = "has an empty key, or a key containing spaces or non-ASCII characters"
         elif key in keys:
@@ -134,6 +141,51 @@ class Settings(BaseSettings):
     @classmethod
     def _parse_mcp_api_keys(cls, value: object) -> object:
         return parse_mcp_api_keys(value) if isinstance(value, str) else value
+
+    database_url: str | None = Field(
+        default=None,
+        description=(
+            "Database for keys managed over HTTP, such as "
+            "`sqlite:///./myna.db` or `postgresql://user:pass@host/db`. Unset "
+            "means no database, and only `MYNA_MCP_API_KEYS` is accepted."
+        ),
+    )
+    key_admin_api_key: str | None = Field(
+        default=None,
+        description=(
+            "Bearer token for `/api/admin/keys`, which creates keys that can run "
+            "every tool. Those routes don't exist unless this is set. Needs "
+            "`MYNA_DATABASE_URL`."
+        ),
+    )
+    max_active_keys: int = Field(
+        default=1000,
+        ge=1,
+        description=(
+            "Refuse new database keys past this many active keys. Each caller "
+            "name adds Prometheus series, so this bounds them."
+        ),
+    )
+
+    @field_validator("database_url", "key_admin_api_key", mode="before")
+    @classmethod
+    def _blank_is_unset(cls, value: object) -> object:
+        return None if value == "" else value
+
+    @field_validator("database_url")
+    @classmethod
+    def _check_database_url(cls, value: str | None) -> str | None:
+        if value is not None:
+            from myna.keys.store import normalize_database_url
+
+            normalize_database_url(value)
+        return value
+
+    @model_validator(mode="after")
+    def _key_admin_needs_database(self) -> Settings:
+        if self.key_admin_api_key and not self.database_url:
+            raise ValueError("MYNA_KEY_ADMIN_API_KEY needs MYNA_DATABASE_URL")
+        return self
 
     mcp_rate_limit_per_minute: int = Field(
         default=120,

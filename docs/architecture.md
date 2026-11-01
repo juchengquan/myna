@@ -60,8 +60,9 @@ everything left of the mount is yours (FastAPI), everything right of it
 is the SDK's responsibility (MCP wire protocol).
 
 - The MCP app is mounted at `MYNA_MCP_MOUNT_PATH` (default `/mcp`). Its
-  internal Streamable HTTP path is set to `/` so the externally-visible
-  endpoint is exactly `/mcp`.
+  internal Streamable HTTP path is set to `/`, so the endpoint is `/mcp/`.
+  A request to `/mcp` gets a `307` redirect to `/mcp/`, so configure
+  clients with the trailing slash.
 - The FastMCP `session_manager` is started/stopped by FastAPI's
   `lifespan` context manager — see `src/myna/main.py`.
 - A fresh `FastMCP` instance is built per app (`build_mcp()` in
@@ -79,13 +80,23 @@ src/myna/
 ├── config.py           # pydantic-settings Settings (MYNA_* env vars)
 ├── logging_config.py   # structlog JSON logging
 ├── mcp_server.py       # build_mcp() + tool registration
+├── middleware.py       # ASGI auth + rate limiting, scoped to /mcp
+├── rate_limit.py       # token bucket
+├── cache.py            # @cached TTL decorator
+├── context.py          # current_caller ContextVar
+├── observability.py    # metrics, audit log, spans for all MCP primitives
+├── tracing.py          # OpenTelemetry provider + exporter setup
+├── weather_client.py   # Open-Meteo HTTP client
 ├── api/                # admin REST surface
 │   ├── __init__.py     #   /api router aggregation
+│   ├── auth.py         #   bearer checks for admin routes and /metrics
 │   ├── health.py       #   GET /api/health
-│   └── admin.py        #   GET /api/admin/tools (bearer auth)
+│   └── admin.py        #   GET /api/admin/{tools,resources,prompts}
 ├── tools/              # MCP tool modules (one per topic)
 │   ├── example.py      #   ping, echo
 │   ├── streaming.py    #   stream_count (Context-streamed)
+│   ├── sampling.py     #   summarize_via_sampling (stateful mode only)
+│   ├── elicitation.py  #   confirm_action (stateful mode only)
 │   └── weather.py      #   get_weather (real, via Open-Meteo)
 ├── resources/          # MCP resource modules
 │   └── example.py      #   myna://server-info, weather://locations/{location}
@@ -109,6 +120,23 @@ src/myna/
   `mcp_server._register_tools()`. Adding a tool means adding a module
   and one line in that registrar — no decorator magic at import time,
   so test isolation stays clean.
-- **Stateless HTTP.** `FastMCP(stateless_http=True)` — each request is
-  self-contained, which is friendlier to horizontal scaling and
-  load-balancing than session-affinity HTTP.
+- **Stateless HTTP by default.** Each request is self-contained, which
+  is friendlier to horizontal scaling and load-balancing than
+  session-affinity HTTP. See below for what this gives up.
+
+## Stateless and stateful mode
+
+`MYNA_MCP_STATELESS` sets the SDK's `stateless_http` option. It defaults
+to `true`.
+
+| | Stateless (default) | Stateful |
+| --- | --- | --- |
+| Multiple replicas | No session affinity needed | Session affinity needed |
+| Tool results and log events | Delivered | Delivered |
+| Progress notifications | Dropped | Delivered |
+| Sampling and elicitation tools | Not registered | Registered |
+
+Sampling and elicitation send a request to the client in the middle of a
+tool call and wait for the reply. In stateless mode that round trip can't
+finish and the call hangs, so `build_mcp()` doesn't register those tools.
+`tests/test_wire.py` covers both modes over the real transport.

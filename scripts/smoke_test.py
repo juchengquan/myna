@@ -24,7 +24,18 @@ from typing import Any
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
-from mcp.types import LoggingMessageNotificationParams
+from mcp.types import (
+    CreateMessageResult,
+    ElicitResult,
+    LoggingMessageNotificationParams,
+    TextContent,
+)
+
+INTERACTIVE_TOOLS = {
+    "summarize_via_sampling": {"text": "MCP lets agents call tools.", "max_words": 5},
+    "confirm_action": {"action": "run the smoke test"},
+}
+INTERACTIVE_TIMEOUT_SECONDS = 15.0
 
 
 def _dump(label: str, value: Any) -> None:
@@ -46,6 +57,20 @@ async def _on_progress(progress: float, total: float | None, message: str | None
     print(f"  [progress] {progress}/{total or '?'}{bar}  {message or ''}")
 
 
+async def _on_sampling(context: Any, params: Any) -> CreateMessageResult:
+    print("  [sampling] replying as the client's LLM")
+    return CreateMessageResult(
+        role="assistant",
+        content=TextContent(type="text", text="A canned summary from the smoke test."),
+        model="smoke-test",
+    )
+
+
+async def _on_elicitation(context: Any, params: Any) -> ElicitResult:
+    print("  [elicitation] replying as the user")
+    return ElicitResult(action="accept", content={"confirmed": True, "note": "smoke test"})
+
+
 async def run(url: str, api_key: str | None = None) -> int:
     print(f"Connecting to MCP server at {url} ...")
     headers: dict[str, str] | None = None
@@ -53,7 +78,13 @@ async def run(url: str, api_key: str | None = None) -> int:
         headers = {"Authorization": f"Bearer {api_key}"}
     async with (
         streamablehttp_client(url, headers=headers) as (read, write, _),
-        ClientSession(read, write, logging_callback=_on_log) as session,
+        ClientSession(
+            read,
+            write,
+            logging_callback=_on_log,
+            sampling_callback=_on_sampling,
+            elicitation_callback=_on_elicitation,
+        ) as session,
     ):
         init = await session.initialize()
         _dump("initialize", init)
@@ -81,13 +112,41 @@ async def run(url: str, api_key: str | None = None) -> int:
             ),
         )
 
+        progress_events = 0
+
+        async def count_progress(progress: float, total: float | None, message: str | None) -> None:
+            nonlocal progress_events
+            progress_events += 1
+            await _on_progress(progress, total, message)
+
         print("\n=== call stream_count (streaming progress + logs below) ===")
         stream_result = await session.call_tool(
             "stream_count",
             {"n": 5, "delay_ms": 100},
-            progress_callback=_on_progress,
+            progress_callback=count_progress,
         )
         _dump("stream_count final", stream_result)
+
+        # The interactive tools are only registered in stateful mode, which
+        # is also the only mode where progress notifications reach the client.
+        if INTERACTIVE_TOOLS.keys() <= set(tool_names):
+            if progress_events != 5:
+                print(f"\nExpected 5 progress events, got {progress_events}", file=sys.stderr)
+                return 1
+
+            for name, arguments in INTERACTIVE_TOOLS.items():
+                try:
+                    async with asyncio.timeout(INTERACTIVE_TIMEOUT_SECONDS):
+                        result = await session.call_tool(name, arguments)
+                except TimeoutError:
+                    print(f"\n{name} did not finish in time", file=sys.stderr)
+                    return 1
+                _dump(f"call {name}", result)
+                if result.isError:
+                    print(f"\n{name} returned an error", file=sys.stderr)
+                    return 1
+        else:
+            print("\nServer is stateless: skipping progress and interactive tool checks.")
 
         # --- Resources ---
         resources = await session.list_resources()

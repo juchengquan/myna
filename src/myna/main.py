@@ -3,11 +3,12 @@ from __future__ import annotations
 import contextlib
 from collections.abc import AsyncIterator
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
 from myna import __version__
 from myna.api import router as api_router
+from myna.api.auth import require_metrics
 from myna.config import get_settings
 from myna.logging_config import configure_logging, get_logger
 from myna.mcp_server import build_mcp
@@ -78,7 +79,7 @@ def create_app() -> FastAPI:
         allow_anonymous=settings.env == "development",
     )
 
-    @app.get("/metrics", include_in_schema=False)
+    @app.get("/metrics", include_in_schema=False, dependencies=[Depends(require_metrics)])
     async def metrics() -> Response:
         payload, content_type = render_metrics()
         return Response(content=payload, media_type=content_type)

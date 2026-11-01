@@ -7,16 +7,23 @@ from myna.mcp_server import build_mcp
 
 
 @pytest.mark.asyncio
-async def test_elicitation_tool_registered() -> None:
-    mcp = build_mcp()
+async def test_elicitation_tool_registered_when_stateful() -> None:
+    mcp = build_mcp(stateless=False)
     tools = await mcp.list_tools()
     assert "confirm_action" in {t.name for t in tools}
+
+
+@pytest.mark.asyncio
+async def test_elicitation_tool_not_registered_when_stateless() -> None:
+    mcp = build_mcp(stateless=True)
+    tools = await mcp.list_tools()
+    assert "confirm_action" not in {t.name for t in tools}
 
 
 @pytest.mark.asyncio
 async def test_elicitation_rejects_empty_action() -> None:
     # Input validation fires before ctx.elicit is reached, so the
     # bad-input path is exercisable in-process without a live client.
-    mcp = build_mcp()
+    mcp = build_mcp(stateless=False)
     with pytest.raises(ToolError, match="action must not be empty"):
         await mcp.call_tool("confirm_action", {"action": "   "})

@@ -13,6 +13,9 @@ Requires the client to advertise the `elicitation` capability during
 the `initialize` handshake. Modern clients (Claude Desktop / Claude
 Code) support it; many smaller SDK demos don't. The tool surfaces a
 clear error rather than hanging if the capability is missing.
+
+Only registered when `MYNA_MCP_STATELESS=false`. In stateless HTTP the
+client's answer never gets back to the tool, so the call would hang.
 """
 
 from __future__ import annotations

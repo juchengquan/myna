@@ -41,7 +41,7 @@ uv add --group dev <package>  # dev-only dep
 
 Then:
 
-- MCP endpoint: `http://localhost:8000/mcp`
+- MCP endpoint: `http://localhost:8000/mcp/`
 - Admin API:    `http://localhost:8000/api/health`
 - OpenAPI docs: `http://localhost:8000/docs`
 
@@ -49,6 +49,11 @@ Then:
 
 All config is via environment variables (see `.env.example`), loaded by `pydantic-settings`.
 Prefix: `MYNA_`.
+
+The server runs in stateless HTTP mode by default, so replicas need no
+session affinity. Progress notifications and the `summarize_via_sampling`
+and `confirm_action` tools need `MYNA_MCP_STATELESS=false`; see
+[`docs/architecture.md`](docs/architecture.md#stateless-and-stateful-mode).
 
 ## Adding tools
 
@@ -63,10 +68,20 @@ src/myna/
   config.py          # pydantic-settings config
   logging_config.py  # structlog setup
   mcp_server.py      # FastMCP instance + tool registration
+  middleware.py      # auth + rate limiting on /mcp
+  rate_limit.py      # token bucket
+  cache.py           # @cached TTL decorator
+  observability.py   # metrics, audit log, spans
+  tracing.py         # OpenTelemetry setup
+  weather_client.py  # Open-Meteo HTTP client
   api/               # admin REST endpoints
   tools/             # MCP tool modules
+  resources/         # MCP resource modules
+  prompts/           # MCP prompt modules
 tests/               # pytest suite
 ```
+
+See [`docs/architecture.md`](docs/architecture.md#package-layout) for the full tree.
 
 ## Docker
 
@@ -85,9 +100,9 @@ uv run mypy src
 
 ### End-to-end smoke test
 
-`pytest` exercises tools in-process. To verify the full Streamable HTTP
-transport with a real MCP client, run the server in one shell and the
-smoke test in another:
+`pytest` starts its own local servers and doesn't call Open-Meteo. To
+verify a running server, including the real weather upstream, run the
+server in one shell and the smoke test in another:
 
 ```bash
 # shell 1
@@ -99,5 +114,6 @@ uv run python scripts/smoke_test.py
 uv run python scripts/smoke_test.py --url http://localhost:8000/mcp/
 ```
 
-It initializes a session, lists tools, and calls `ping`, `echo`, and
-`get_weather` (both units).
+It initializes a session and exercises the tools, resources, and prompts.
+Against a stateful server it also checks progress notifications and both
+interactive tools, and fails if one doesn't finish within 15 seconds.

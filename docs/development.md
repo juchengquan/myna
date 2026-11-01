@@ -30,9 +30,11 @@ uv run pytest -v tests/test_weather_tool.py
 uv run pytest --cov=myna --cov-report=term-missing
 ```
 
-The pytest suite exercises tools **in-process** against the `FastMCP`
-instance — no HTTP layer. Each test gets a fresh app via the `client`
-fixture in [`tests/conftest.py`](../tests/conftest.py).
+Most of the pytest suite exercises tools **in-process** against the
+`FastMCP` instance — no HTTP layer. Each test gets a fresh app via the
+`client` fixture in [`tests/conftest.py`](../tests/conftest.py).
+[`tests/test_wire.py`](../tests/test_wire.py) starts real local servers
+and covers stateless and stateful mode over Streamable HTTP.
 
 ## Lint and type-check
 
@@ -48,7 +50,7 @@ because FastAPI's `Depends(...)`/`Header(...)` defaults are idiomatic.
 
 ## End-to-end smoke test
 
-`pytest` does not exercise the Streamable HTTP transport. For that, run
+To check a running server, including the real Open-Meteo upstream, run
 the server in one shell and the smoke script in another:
 
 ```bash
@@ -61,9 +63,11 @@ uv run python scripts/smoke_test.py
 uv run python scripts/smoke_test.py --url http://localhost:8000/mcp/
 ```
 
-The script initializes a real MCP session, lists tools, and calls
-`ping` / `echo` / `get_weather`. It exits non-zero if any expected tool
-is missing.
+The script initializes a real MCP session and exercises the tools,
+resources, and prompts. It exits non-zero if anything expected is
+missing. Against a server with `MYNA_MCP_STATELESS=false`, it also fails
+if progress notifications don't arrive, or if `summarize_via_sampling` or
+`confirm_action` errors or doesn't finish within 15 seconds.
 
 ## Adding / updating dependencies
 

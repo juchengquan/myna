@@ -14,6 +14,9 @@ Requires the client to advertise the `sampling` capability during the
 `initialize` handshake — Claude Desktop and Claude Code support it;
 most basic SDK demos do not. The tool returns a clear error if the
 capability is missing.
+
+Only registered when `MYNA_MCP_STATELESS=false`. Stateless HTTP has no
+channel for the server's request, so the call would hang.
 """
 
 from __future__ import annotations

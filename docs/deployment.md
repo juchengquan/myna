@@ -27,6 +27,8 @@ The image:
 - [ ] Set `MYNA_ENV=production`.
 - [ ] Set `MYNA_ADMIN_API_KEY` to a high-entropy random value (e.g.
       `openssl rand -hex 32`). Without it, admin endpoints return `500`.
+- [ ] Set `MYNA_METRICS_API_KEY` the same way and give it to your
+      Prometheus scrape config. Without it, `/metrics` returns `500`.
 - [ ] Set `MYNA_MCP_API_KEYS` to a JSON object mapping at least one
       bearer token to a caller label. Without it, all `/mcp` traffic
       is rejected with `401`.
@@ -47,8 +49,10 @@ The image:
 - [ ] Decide on `MYNA_MCP_MOUNT_PATH` and pin it — clients hard-code it.
 - [ ] Pin the image to a specific tag/digest in your deployment manifest.
 - [ ] Set resource limits (CPU/memory) and configure horizontal scaling
-      based on connection count. `stateless_http=True` makes scale-out
-      safe — no session affinity needed.
+      based on connection count. The default stateless mode makes
+      scale-out safe — no session affinity needed. If you set
+      `MYNA_MCP_STATELESS=false`, configure session affinity for
+      multiple replicas.
 
 ## Running directly (without Docker)
 
@@ -56,9 +60,13 @@ The image:
 uv sync --no-dev
 uv run uvicorn myna.main:app \
   --host 0.0.0.0 --port 8000 \
-  --workers 4 \
   --proxy-headers --forwarded-allow-ips='*'
 ```
+
+Scale by running more single-worker instances rather than adding
+`--workers`. The cache, rate limiter, and Prometheus counters are all
+per process, so with several workers on one port each scrape of
+`/metrics` reports only the worker that answered it.
 
 Use a process supervisor (systemd, supervisord, nomad, k8s, ...) to
 manage restarts.
@@ -77,7 +85,8 @@ manage restarts.
   When tracing is enabled, every line also carries `trace_id` and
   `span_id` of the active span — drop them into your tracing UI to
   jump from a log line straight to the trace.
-- **Metrics**: Prometheus exposition at `GET /metrics`:
+- **Metrics**: Prometheus exposition at `GET /metrics`, protected by
+  `MYNA_METRICS_API_KEY` outside development:
   - `myna_tool_calls_total{tool, caller, status}` counter +
     `myna_tool_call_duration_seconds{tool}` histogram
   - `myna_tool_cache_total{tool, outcome}` counter (only for tools
@@ -112,5 +121,7 @@ manage restarts.
 1. Bump the version in [`pyproject.toml`](../pyproject.toml).
 2. Run `uv lock` to refresh `uv.lock`.
 3. Build and roll out the new image.
-4. Because `stateless_http=True`, rolling updates do not need draining
-   beyond the in-flight request window.
+4. In the default stateless mode, rolling updates do not need draining
+   beyond the in-flight request window. With `MYNA_MCP_STATELESS=false`,
+   clients on a replaced instance lose their session and must
+   re-initialize.

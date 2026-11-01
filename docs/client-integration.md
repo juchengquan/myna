@@ -83,7 +83,11 @@ await client.close();
 - The MCP endpoint expects `POST` with
   `Accept: application/json, text/event-stream`. Plain `GET /mcp/` will
   not return useful output — use a real MCP client.
-- Myna runs in `stateless_http=True` mode: clients should not assume a
-  long-lived session and should re-initialize on reconnect.
+- Myna runs in stateless mode by default: clients should not assume a
+  long-lived session and should re-initialize on reconnect. Progress
+  notifications and the sampling and elicitation tools need a server
+  running with `MYNA_MCP_STATELESS=false`.
+- Use the trailing slash in the endpoint URL. A request to `/mcp` gets a
+  `307` redirect to `/mcp/`, which not every client follows.
 - For production deployments behind a reverse proxy, keep the proxy's
   buffering off for `/mcp` — SSE responses must stream.

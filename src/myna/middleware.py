@@ -1,7 +1,7 @@
 """ASGI middleware for the mounted MCP endpoint.
 
 The admin REST API has its own dependency-based auth (see
-`myna.api.admin.require_admin`). The MCP endpoint is a mounted Starlette
+`myna.api.auth.require_admin`). The MCP endpoint is a mounted Starlette
 sub-app that doesn't go through FastAPI's dependency system, so we
 enforce auth and rate limiting here as ASGI middleware scoped to the
 mount prefix.

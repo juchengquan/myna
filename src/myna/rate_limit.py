@@ -10,8 +10,10 @@ Limitations:
 - In-memory only — buckets are not shared across uvicorn workers or
   replicas. For multi-replica enforcement, swap in a Redis-backed
   store behind the same interface.
-- Buckets are never evicted in this implementation; for very large key
-  spaces add an LRU or TTL eviction strategy.
+
+Idle buckets are swept once a minute. A bucket idle for that long has
+fully refilled, so dropping it is the same as keeping it: the next
+request from that key starts with a full bucket either way.
 """
 
 from __future__ import annotations
@@ -19,6 +21,9 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
+
+# Refill rate is capacity / 60, so an empty bucket always refills in 60s.
+_FULL_REFILL_SECONDS = 60.0
 
 
 @dataclass
@@ -35,6 +40,7 @@ class RateLimiter:
         self._buckets: dict[str, _Bucket] = {}
         self._lock = asyncio.Lock()
         self._clock = time.monotonic
+        self._last_sweep = 0.0
 
     @property
     def enabled(self) -> bool:
@@ -47,6 +53,7 @@ class RateLimiter:
 
         now = self._clock()
         async with self._lock:
+            self._sweep_idle(now)
             bucket = self._buckets.get(key)
             if bucket is None:
                 bucket = _Bucket(tokens=self.capacity, last_refill=now)
@@ -63,3 +70,13 @@ class RateLimiter:
             deficit = 1.0 - bucket.tokens
             retry_after = deficit / self.refill_per_second if self.refill_per_second else 0.0
             return False, retry_after
+
+    def _sweep_idle(self, now: float) -> None:
+        if now - self._last_sweep < _FULL_REFILL_SECONDS:
+            return
+        self._last_sweep = now
+        self._buckets = {
+            key: bucket
+            for key, bucket in self._buckets.items()
+            if now - bucket.last_refill < _FULL_REFILL_SECONDS
+        }

@@ -74,7 +74,8 @@ Myna should run as a container of its own (built from the same
 - OTLP collector reachable at whatever URL is in
   `MYNA_OTEL_EXPORTER_ENDPOINT`.
 - A Prometheus scrape (or an exporter sidecar) hitting Myna's
-  `/metrics`.
+  `/metrics` with `MYNA_METRICS_API_KEY` as its bearer token. The local
+  stack runs in `development` with no key, so it needs no credentials.
 - Your log shipper following stdout.
 
 See [`deployment.md`](deployment.md) for the production checklist.

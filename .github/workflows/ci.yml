@@ -4,20 +4,25 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Advisories appear without code changes, so re-audit every week.
+    - cron: "0 6 * * 1"
 
 jobs:
   test:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
+          cache-suffix: ${{ matrix.python-version }}
 
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
@@ -33,3 +38,17 @@ jobs:
 
       - name: Test
         run: uv run pytest --cov=myna --cov-report=term-missing
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Export runtime dependencies
+        run: uv export --frozen --no-dev --no-hashes --no-emit-project -o requirements-audit.txt
+
+      - name: Audit for known vulnerabilities
+        run: uvx pip-audit==2.10.1 -r requirements-audit.txt --no-deps --disable-pip

@@ -12,7 +12,7 @@ license = { file = "LICENSE" }
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
-    "mcp>=1.27.1",
+    "mcp>=1.30,<2",
     "pydantic>=2.7",
     "pydantic-settings>=2.4",
     "structlog>=24.1",
@@ -45,6 +45,7 @@ package = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 addopts = "-ra -q"
 
 [tool.ruff]

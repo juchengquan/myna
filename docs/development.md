@@ -91,3 +91,8 @@ Always commit `uv.lock` together with the `pyproject.toml` change.
 5. `uv run pytest --cov=myna --cov-report=term-missing`
 
 The job matrix covers Python 3.11 and 3.12.
+
+A separate `audit` job runs `pip-audit` against the locked runtime
+dependencies, on every push and PR and weekly, because advisories appear
+without code changes. Dependabot opens weekly update PRs for Python
+dependencies, GitHub Actions, and the Docker base image.

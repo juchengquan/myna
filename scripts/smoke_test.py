@@ -27,17 +27,10 @@ import httpx2
 from mcp import ClientSession
 from mcp.client import Client
 from mcp.client.streamable_http import streamable_http_client
-from mcp.types import (
-    CreateMessageResult,
-    ElicitResult,
-    LoggingMessageNotificationParams,
-    TextContent,
-)
+from mcp.shared.exceptions import MCPError
+from mcp.types import INVALID_REQUEST, ElicitResult
 
-INTERACTIVE_TOOLS = {
-    "summarize_via_sampling": {"text": "MCP lets agents call tools.", "max_words": 5},
-    "confirm_action": {"action": "run the smoke test"},
-}
+CONFIRM_ARGUMENTS = {"action": "run the smoke test"}
 INTERACTIVE_TIMEOUT_SECONDS = 15.0
 MODERN_PROTOCOL = "2026-07-28"
 _TIMEOUT = httpx2.Timeout(30.0, read=300.0)
@@ -50,25 +43,12 @@ def _dump(label: str, value: Any) -> None:
     print(json.dumps(value, indent=2, default=str))
 
 
-async def _on_log(params: LoggingMessageNotificationParams) -> None:
-    print(f"  [log/{params.level}] {params.data}")
-
-
 async def _on_progress(progress: float, total: float | None, message: str | None) -> None:
     bar = ""
     if total:
         pct = int(100 * progress / total)
         bar = f" [{pct:>3}%]"
     print(f"  [progress] {progress}/{total or '?'}{bar}  {message or ''}")
-
-
-async def _on_sampling(context: Any, params: Any) -> CreateMessageResult:
-    print("  [sampling] replying as the client's LLM")
-    return CreateMessageResult(
-        role="assistant",
-        content=TextContent(type="text", text="A canned summary from the smoke test."),
-        model="smoke-test",
-    )
 
 
 async def _on_elicitation(context: Any, params: Any) -> ElicitResult:
@@ -84,13 +64,7 @@ async def run(url: str, api_key: str | None = None) -> int:
     async with (
         httpx2.AsyncClient(headers=headers, timeout=_TIMEOUT) as http_client,
         streamable_http_client(url, http_client=http_client) as (read, write),
-        ClientSession(
-            read,
-            write,
-            logging_callback=_on_log,
-            sampling_callback=_on_sampling,
-            elicitation_callback=_on_elicitation,
-        ) as session,
+        ClientSession(read, write, elicitation_callback=_on_elicitation) as session,
     ):
         init = await session.initialize()
         _dump("initialize", init)
@@ -125,7 +99,7 @@ async def run(url: str, api_key: str | None = None) -> int:
             progress_events += 1
             await _on_progress(progress, total, message)
 
-        print("\n=== call stream_count (streaming progress + logs below) ===")
+        print("\n=== call stream_count (streaming progress below) ===")
         stream_result = await session.call_tool(
             "stream_count",
             {"n": 5, "delay_ms": 100},
@@ -137,21 +111,23 @@ async def run(url: str, api_key: str | None = None) -> int:
             print(f"\nExpected 5 progress events, got {progress_events}", file=sys.stderr)
             return 1
 
-        # The interactive tools are only registered in stateful mode.
-        if INTERACTIVE_TOOLS.keys() <= set(tool_names):
-            for name, arguments in INTERACTIVE_TOOLS.items():
-                try:
-                    async with asyncio.timeout(INTERACTIVE_TIMEOUT_SECONDS):
-                        result = await session.call_tool(name, arguments)
-                except TimeoutError:
-                    print(f"\n{name} did not finish in time", file=sys.stderr)
-                    return 1
-                _dump(f"call {name}", result)
-                if result.is_error:
-                    print(f"\n{name} returned an error", file=sys.stderr)
-                    return 1
+        # A legacy client in stateless mode has no channel for the question.
+        try:
+            async with asyncio.timeout(INTERACTIVE_TIMEOUT_SECONDS):
+                result = await session.call_tool("confirm_action", CONFIRM_ARGUMENTS)
+        except TimeoutError:
+            print("\nconfirm_action did not finish in time", file=sys.stderr)
+            return 1
+        except MCPError as exc:
+            if exc.error.code != INVALID_REQUEST:
+                print(f"\nconfirm_action failed: {exc}", file=sys.stderr)
+                return 1
+            print("\nServer is stateless: legacy clients can't be asked questions.")
         else:
-            print("\nServer is stateless: skipping interactive tool checks.")
+            _dump("call confirm_action", result)
+            if result.is_error:
+                print("\nconfirm_action returned an error", file=sys.stderr)
+                return 1
 
         # --- Resources ---
         resources = await session.list_resources()
@@ -214,9 +190,6 @@ async def run_modern(url: str, headers: dict[str, str] | None) -> int:
         httpx2.AsyncClient(headers=headers, timeout=_TIMEOUT) as http_client,
         Client(
             streamable_http_client(url, http_client=http_client),
-            logging_callback=_on_log,
-            log_level="info",
-            sampling_callback=_on_sampling,
             elicitation_callback=_on_elicitation,
         ) as client,
     ):
@@ -225,7 +198,6 @@ async def run_modern(url: str, headers: dict[str, str] | None) -> int:
             print(f"\nExpected protocol {MODERN_PROTOCOL}", file=sys.stderr)
             return 1
 
-        tool_names = {tool.name for tool in (await client.list_tools()).tools}
         _dump("call ping", await client.call_tool("ping", {}))
         await client.call_tool(
             "stream_count", {"n": 5, "delay_ms": 0}, progress_callback=count_progress
@@ -234,14 +206,12 @@ async def run_modern(url: str, headers: dict[str, str] | None) -> int:
             print(f"\nExpected 5 progress events, got {progress_events}", file=sys.stderr)
             return 1
 
-        if INTERACTIVE_TOOLS.keys() <= tool_names:
-            for name, arguments in INTERACTIVE_TOOLS.items():
-                async with asyncio.timeout(INTERACTIVE_TIMEOUT_SECONDS):
-                    result = await client.call_tool(name, arguments)
-                _dump(f"call {name}", result)
-                if result.is_error:
-                    print(f"\n{name} returned an error", file=sys.stderr)
-                    return 1
+        async with asyncio.timeout(INTERACTIVE_TIMEOUT_SECONDS):
+            result = await client.call_tool("confirm_action", CONFIRM_ARGUMENTS)
+        _dump("call confirm_action", result)
+        if result.is_error:
+            print("\nconfirm_action returned an error", file=sys.stderr)
+            return 1
 
     print("\nSmoke test OK")
     return 0

@@ -26,9 +26,8 @@ class Settings(BaseSettings):
         default=True,
         description=(
             "Run the MCP endpoint in stateless HTTP mode, so replicas need no "
-            "session affinity. Legacy clients can't receive server-to-client "
-            "requests in this mode, so sampling and elicitation tools are only "
-            "registered when this is false."
+            "session affinity. Legacy clients can't be asked questions in this "
+            "mode, so `confirm_action` returns a protocol error for them."
         ),
     )
     mcp_session_idle_timeout_seconds: float = Field(

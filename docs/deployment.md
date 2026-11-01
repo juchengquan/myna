@@ -25,6 +25,13 @@ The image:
 - Runs as a non-root `myna` user.
 - Exposes a `HEALTHCHECK` that hits `GET /api/health`.
 
+## What has been tested
+
+The image has run behind nginx over HTTP with production settings, using the
+SDK's clients in both server modes. It hasn't run on a real remote host or
+with TLS, or under load, or across multiple replicas. Expect your first
+remote deployment to be the first real test of those.
+
 ## Production checklist
 
 - [ ] Set `MYNA_ENV=production`.

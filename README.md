@@ -1,8 +1,11 @@
 # Myna
 
-MCP service backend built on **FastAPI**, with the official
+A template for production-minded MCP servers, built on **FastAPI**, with
+the official
 [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
-mounted as a sub-app to speak the MCP wire protocol.
+mounted as a sub-app to speak the MCP wire protocol. Authentication, rate
+limiting, and observability are already wired in, and the example tools show
+one pattern each.
 
 - FastAPI owns the process — lifespan, routing, OpenAPI, the admin API,
   and any HTTP routes you add.
@@ -56,14 +59,36 @@ Outside local development, set these or the endpoints reject requests:
 
 See [`docs/deployment.md`](docs/deployment.md) for the full checklist.
 
+## Start a new server
+
+This repo is a GitHub template. Click **Use this template**, clone your copy,
+and rename the project. The new name must be a lowercase Python identifier:
+
+```bash
+NAME=acme
+git mv src/myna "src/$NAME"
+git grep -Ili myna | xargs perl -pi -e "s/MYNA/\U$NAME/g; s/Myna/\u$NAME/g; s/myna/$NAME/g"
+uv lock
+uv run pytest
+```
+
+Then:
+
+- Check the repo URL in the weather client's `User-Agent`, which the command
+  also rewrites, along with this section.
+- Delete the example tools you don't need from `tools/`, along with their lines
+  in `mcp_server.py`, their tests, and their checks in `scripts/smoke_test.py`.
+- Note the license. The code is GPL-3.0, which generally applies to anything
+  you distribute that's built on it.
+
 ## Configuration
 
 All config is via environment variables (see `.env.example`), loaded by `pydantic-settings`.
 Prefix: `MYNA_`.
 
 The server runs in stateless HTTP mode by default, so replicas need no
-session affinity. The `summarize_via_sampling` and `confirm_action` tools
-need `MYNA_MCP_STATELESS=false`; see
+session affinity. Clients older than the 2026-07-28 spec need
+`MYNA_MCP_STATELESS=false` to use `confirm_action`; see
 [`docs/architecture.md`](docs/architecture.md#stateless-and-stateful-mode).
 
 ## Adding tools
@@ -126,5 +151,5 @@ uv run python scripts/smoke_test.py --url http://localhost:8000/mcp/
 ```
 
 It connects as a legacy client and as a 2026-07-28 client, and exercises
-the tools, resources, and prompts. It checks progress notifications. Against a stateful server it also checks
-both interactive tools, and fails if one doesn't finish within 15 seconds.
+the tools, resources, and prompts. It also checks progress notifications and
+`confirm_action`, and fails if that tool doesn't finish within 15 seconds.

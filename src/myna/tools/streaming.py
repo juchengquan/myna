@@ -13,13 +13,11 @@ def register(mcp: MCPServer) -> None:
         n: int = 5,
         delay_ms: int = 200,
     ) -> str:
-        """Count from 1 to *n*, streaming progress + log events to the client.
+        """Count from 1 to *n*, streaming progress to the client.
 
         Useful as a dummy long-running tool to verify that progress
-        notifications and log messages flow over the Streamable HTTP
-        transport. Pure demo — does no real work. MCP logging is deprecated
-        as of the 2026-07-28 spec, so new tools should use progress or
-        standard logging instead.
+        notifications flow over the Streamable HTTP transport. Pure demo —
+        does no real work.
 
         Args:
             n: How high to count (1..20).
@@ -32,7 +30,6 @@ def register(mcp: MCPServer) -> None:
 
         for i in range(1, n + 1):
             await ctx.report_progress(progress=i, total=n, message=f"step {i}/{n}")
-            await ctx.info(f"tick {i}")
             if delay_ms:
                 await asyncio.sleep(delay_ms / 1000)
 

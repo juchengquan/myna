@@ -97,8 +97,7 @@ src/myna/
 ├── tools/              # MCP tool modules (one per topic)
 │   ├── example.py      #   ping, echo
 │   ├── streaming.py    #   stream_count (Context-streamed)
-│   ├── sampling.py     #   summarize_via_sampling (stateful mode only)
-│   ├── elicitation.py  #   confirm_action (stateful mode only)
+│   ├── elicitation.py  #   confirm_action
 │   └── weather.py      #   get_weather (real, via Open-Meteo)
 ├── resources/          # MCP resource modules
 │   └── example.py      #   myna://server-info, weather://locations/{location}
@@ -141,15 +140,13 @@ request by its protocol version, so one endpoint serves both eras.
 | --- | --- | --- | --- |
 | Multiple replicas | No session affinity needed | Session affinity needed | No session affinity needed |
 | Tool results | Delivered | Delivered | Delivered |
-| Log events | Delivered | Delivered | Delivered if the client asks with a log level |
 | Progress notifications | Delivered | Delivered | Delivered |
-| Sampling and elicitation tools | Not registered | Registered | Follows the server's mode |
+| `confirm_action` | Protocol error | Works | Works |
 
-Sampling and elicitation need a way to ask the client a question. A legacy
-client in stateless mode has no channel for that, so `build_mcp()` doesn't
-register those tools in stateless mode. Those tools use resolvers, so the
-SDK picks how to ask for each connection: a request mid-call for a legacy
-client, or a question in the tool result for a 2026-07-28 client.
+`confirm_action` asks the client a question. It uses a resolver, so the SDK
+picks how to ask for each connection: a request mid-call for a legacy client,
+or a question in the tool result for a 2026-07-28 client. A legacy client in
+stateless mode has no channel for that, so it gets a protocol error.
 
 In stateful mode, a legacy session closes after 30 idle minutes, and new
 ones are refused past 10,000 per process, with `503`. Change these with

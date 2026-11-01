@@ -17,7 +17,7 @@ working directory are loaded automatically.
 | `MYNA_LOG_LEVEL` | string | `INFO` | Log level (`DEBUG`/`INFO`/`WARNING`/`ERROR`). |
 | `MYNA_MCP_SERVER_NAME` | string | `myna` | Server name advertised to MCP clients during `initialize`. |
 | `MYNA_MCP_MOUNT_PATH` | string | `/mcp` | URL prefix where the MCP Streamable HTTP app is mounted. |
-| `MYNA_MCP_STATELESS` | bool | `true` | Run the MCP endpoint in stateless HTTP mode. Set to `false` for the sampling and elicitation tools; multiple replicas then need session affinity for legacy clients. See [architecture.md](architecture.md#stateless-and-stateful-mode). |
+| `MYNA_MCP_STATELESS` | bool | `true` | Run the MCP endpoint in stateless HTTP mode. Set to `false` so legacy clients can use `confirm_action`; multiple replicas then need session affinity for legacy clients. See [architecture.md](architecture.md#stateless-and-stateful-mode). |
 | `MYNA_MCP_SESSION_IDLE_TIMEOUT_SECONDS` | float | `1800` | Close a stateful session after this long with nothing in flight; the client then gets `404` and must re-initialize. `0` means never. No effect in stateless mode. |
 | `MYNA_MCP_MAX_SESSIONS` | int | `10000` | Refuse new stateful sessions past this many per process, with `503`. `0` means no limit. No effect in stateless mode. |
 | `MYNA_MCP_ALLOWED_HOSTS` | JSON list | `["127.0.0.1:*", "localhost:*", "[::1]:*"]` | `Host` header values accepted on `/mcp`; anything else gets `421`. Entries match exactly, or use `host:*` for any port. Remote deployments must add their hostname. Example: `MYNA_MCP_ALLOWED_HOSTS='["myna.example.com"]'`. |

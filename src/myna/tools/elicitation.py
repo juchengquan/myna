@@ -1,10 +1,9 @@
 """MCP elicitation demo.
 
-An `Elicit` returned from a resolver reverses the usual flow in a
-different way than sampling: the server asks the *user* (via the client
-UI) for input, then runs the tool with the answer. Sampling asks the LLM;
-elicitation asks the human. The SDK picks how to ask from the negotiated
-protocol version, so one tool body serves both.
+An `Elicit` returned from a resolver reverses the usual flow: the server
+asks the *user* (via the client UI) for input, then runs the tool with the
+answer. The SDK picks how to ask from the negotiated protocol version, so
+one tool body serves both.
 
 Useful when a tool needs a typed decision the LLM shouldn't make
 unilaterally — confirming a destructive action, picking between a few
@@ -13,8 +12,8 @@ options, supplying a value the LLM has no way to know.
 Requires the client to advertise the `elicitation` capability. Without
 it, the call fails with a `-32021` protocol error.
 
-Only registered when `MYNA_MCP_STATELESS=false`. A legacy client in
-stateless mode has no channel to receive the question.
+A legacy client in stateless mode has no channel to receive the question,
+so it gets a protocol error. 2026-07-28 clients work in either server mode.
 """
 
 from __future__ import annotations

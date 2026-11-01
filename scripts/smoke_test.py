@@ -22,8 +22,9 @@ import json
 import sys
 from typing import Any
 
+import httpx
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 from mcp.types import (
     CreateMessageResult,
     ElicitResult,
@@ -77,7 +78,8 @@ async def run(url: str, api_key: str | None = None) -> int:
     if api_key:
         headers = {"Authorization": f"Bearer {api_key}"}
     async with (
-        streamablehttp_client(url, headers=headers) as (read, write, _),
+        httpx.AsyncClient(headers=headers, timeout=httpx.Timeout(30.0, read=300.0)) as http_client,
+        streamable_http_client(url, http_client=http_client) as (read, write, _),
         ClientSession(
             read,
             write,

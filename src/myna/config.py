@@ -32,6 +32,23 @@ class Settings(BaseSettings):
         ),
     )
 
+    mcp_allowed_hosts: list[str] = Field(
+        default_factory=lambda: ["127.0.0.1:*", "localhost:*", "[::1]:*"],
+        description=(
+            "Host header values accepted on the MCP endpoint, as a JSON list. "
+            "Anything else gets a 421. Entries match exactly, or use `host:*` "
+            'for any port. Remote deployments must add their hostname, e.g. '
+            '`MYNA_MCP_ALLOWED_HOSTS=\'["myna.example.com"]\'`.'
+        ),
+    )
+    mcp_allowed_origins: list[str] = Field(
+        default_factory=lambda: ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
+        description=(
+            "Origin header values accepted on the MCP endpoint, as a JSON list. "
+            "Anything else gets a 403. Only browser-based clients send Origin."
+        ),
+    )
+
     admin_api_key: str | None = Field(default=None, description="Bearer token for admin API")
     metrics_api_key: str | None = Field(
         default=None,

@@ -6,21 +6,24 @@ sub-app that doesn't go through FastAPI's dependency system, so we
 enforce auth and rate limiting here as ASGI middleware scoped to the
 mount prefix.
 
-Two middlewares live here, intended to be applied in this order on the
+Three middlewares live here, intended to be applied in this order on the
 FastAPI app (outermost first):
 
-    app.add_middleware(RateLimitMiddleware, ...)   # inner: runs second
+    app.add_middleware(MountPathMiddleware, ...)   # inner: runs third
+    app.add_middleware(RateLimitMiddleware, ...)   # middle: runs second
     app.add_middleware(MCPAuthMiddleware, ...)     # outer: runs first
 
 Starlette wraps middleware in LIFO order, so the last `add_middleware`
 call sits closest to the network and runs first on inbound requests.
 That means auth resolves the caller label into the `current_caller`
-ContextVar before the rate limiter reads it.
+ContextVar before the rate limiter reads it. Failed auth attempts never
+reach the rate limit middleware, so the auth middleware limits them itself.
 """
 
 from __future__ import annotations
 
 import json
+import secrets
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -31,6 +34,24 @@ from myna.observability import RATE_LIMIT_HITS
 from myna.rate_limit import RateLimiter
 
 
+class MountPathMiddleware:
+    """Serve the bare mount path directly instead of redirecting to `path/`.
+
+    Starlette only routes `/mcp/` to the mounted app and answers `/mcp` with
+    a 307, which not every MCP client follows.
+    """
+
+    def __init__(self, app: ASGIApp, *, prefix: str) -> None:
+        self._app = app
+        self._prefix = prefix.rstrip("/")
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and self._prefix and scope.get("path") == self._prefix:
+            path = f"{self._prefix}/"
+            scope = {**scope, "path": path, "raw_path": path.encode("ascii")}
+        await self._app(scope, receive, send)
+
+
 class MCPAuthMiddleware:
     def __init__(
         self,
@@ -39,11 +60,13 @@ class MCPAuthMiddleware:
         prefix: str,
         api_keys: dict[str, str],
         allow_anonymous: bool,
+        failure_limiter: RateLimiter,
     ) -> None:
         self._app = app
         self._prefix = prefix.rstrip("/") or "/"
         self._api_keys = dict(api_keys)
         self._allow_anonymous = allow_anonymous
+        self._failure_limiter = failure_limiter
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or not _path_matches(scope, self._prefix):
@@ -52,6 +75,16 @@ class MCPAuthMiddleware:
 
         caller = self._authenticate(scope)
         if caller is None:
+            # Only failures spend these tokens, so a valid key still works
+            # from an address that is being throttled.
+            allowed, retry_after = await self._failure_limiter.check(
+                f"auth-failure:{_client_ip(scope)}"
+            )
+            if not allowed:
+                RATE_LIMIT_HITS.labels(key_kind="auth_failure").inc()
+                await _send_rate_limited(send, retry_after)
+                return
+
             await _send_json(
                 send,
                 401,
@@ -75,7 +108,14 @@ class MCPAuthMiddleware:
         if scheme.lower() != "bearer" or not token:
             return None
 
-        return self._api_keys.get(token)
+        # Check every key in constant time, so timing reveals nothing about
+        # how close a guess was.
+        presented = token.encode()
+        caller = None
+        for key, label in self._api_keys.items():
+            if secrets.compare_digest(key.encode(), presented):
+                caller = label
+        return caller
 
 
 class RateLimitMiddleware:
@@ -105,13 +145,7 @@ class RateLimitMiddleware:
         allowed, retry_after = await self._limiter.check(key)
         if not allowed:
             RATE_LIMIT_HITS.labels(key_kind=key_kind).inc()
-            retry_after_seconds = max(1, int(retry_after) + 1)
-            await _send_json(
-                send,
-                429,
-                {"error": "rate_limited", "retry_after": round(retry_after, 2)},
-                extra_headers=[(b"retry-after", str(retry_after_seconds).encode("ascii"))],
-            )
+            await _send_rate_limited(send, retry_after)
             return
 
         await self._app(scope, receive, send)
@@ -128,9 +162,12 @@ def _rate_limit_key(scope: Scope) -> tuple[str, str]:
     caller = current_caller.get()
     if caller != ANONYMOUS:
         return f"caller:{caller}", "caller"
+    return f"ip:{_client_ip(scope)}", "ip"
+
+
+def _client_ip(scope: Scope) -> str:
     client = scope.get("client")
-    ip = client[0] if client else "unknown"
-    return f"ip:{ip}", "ip"
+    return client[0] if client else "unknown"
 
 
 def _get_header(scope: Scope, name: bytes) -> str:
@@ -139,6 +176,16 @@ def _get_header(scope: Scope, name: bytes) -> str:
             decoded: str = value.decode("latin-1")
             return decoded
     return ""
+
+
+async def _send_rate_limited(send: Send, retry_after: float) -> None:
+    retry_after_seconds = max(1, int(retry_after) + 1)
+    await _send_json(
+        send,
+        429,
+        {"error": "rate_limited", "retry_after": round(retry_after, 2)},
+        extra_headers=[(b"retry-after", str(retry_after_seconds).encode("ascii"))],
+    )
 
 
 async def _send_json(

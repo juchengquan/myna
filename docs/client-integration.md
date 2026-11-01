@@ -19,15 +19,17 @@ so local iteration is friction-free.
 
 ```python
 import asyncio
+import httpx
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 
 
 async def main() -> None:
     headers = {"Authorization": "Bearer sk-abc"}
     async with (
-        streamablehttp_client(
-            "http://localhost:8000/mcp/", headers=headers,
+        httpx.AsyncClient(headers=headers, timeout=httpx.Timeout(30.0, read=300.0)) as http_client,
+        streamable_http_client(
+            "http://localhost:8000/mcp/", http_client=http_client,
         ) as (read, write, _),
         ClientSession(read, write) as session,
     ):
@@ -87,7 +89,8 @@ await client.close();
   long-lived session and should re-initialize on reconnect. Progress
   notifications and the sampling and elicitation tools need a server
   running with `MYNA_MCP_STATELESS=false`.
-- Use the trailing slash in the endpoint URL. A request to `/mcp` gets a
-  `307` redirect to `/mcp/`, which not every client follows.
+- A `421 Invalid Host header` response means the hostname in the URL isn't
+  in `MYNA_MCP_ALLOWED_HOSTS`. A `403 Invalid Origin header` response means
+  a browser client's origin isn't in `MYNA_MCP_ALLOWED_ORIGINS`.
 - For production deployments behind a reverse proxy, keep the proxy's
   buffering off for `/mcp` — SSE responses must stream.

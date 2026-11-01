@@ -84,7 +84,7 @@ Always commit `uv.lock` together with the `pyproject.toml` change.
 
 `.github/workflows/ci.yml` runs on every push to `main` and every PR:
 
-1. Install uv (`astral-sh/setup-uv@v3`).
+1. Install uv (`astral-sh/setup-uv@v7`).
 2. `uv sync --frozen` against `uv.lock`.
 3. `uv run ruff check .`
 4. `uv run mypy src`

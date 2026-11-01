@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from myna.config import get_settings
 from myna.observability import instrument
@@ -22,6 +23,11 @@ def build_mcp(*, stateless: bool | None = None) -> FastMCP:
         name=settings.mcp_server_name,
         stateless_http=stateless,
         streamable_http_path="/",
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=settings.mcp_allowed_hosts,
+            allowed_origins=settings.mcp_allowed_origins,
+        ),
     )
     instrument(mcp)
     _register_tools(mcp, stateless=stateless)

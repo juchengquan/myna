@@ -15,7 +15,8 @@ from myna.weather_client import WeatherClient
 @pytest.fixture()
 def client() -> Iterator[TestClient]:
     app = create_app()
-    with TestClient(app) as c:
+    # The MCP endpoint rejects TestClient's default `testserver` host.
+    with TestClient(app, base_url="http://localhost") as c:
         yield c
 
 

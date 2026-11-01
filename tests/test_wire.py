@@ -16,10 +16,11 @@ import time
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
+import httpx
 import pytest
 import uvicorn
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 from mcp.types import (
     CreateMessageResult,
     ElicitResult,
@@ -76,7 +77,8 @@ def stateful_url(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
 async def _session(url: str, **callbacks: Any) -> AsyncIterator[ClientSession]:
     async with (
         asyncio.timeout(TIMEOUT_SECONDS),
-        streamablehttp_client(url) as (read, write, _),
+        httpx.AsyncClient(follow_redirects=False) as http_client,
+        streamable_http_client(url, http_client=http_client) as (read, write, _),
         ClientSession(read, write, **callbacks) as session,
     ):
         await session.initialize()
@@ -108,6 +110,14 @@ async def test_stateless_omits_interactive_tools(stateless_url: str) -> None:
         assert "stream_count" in tools
         assert "summarize_via_sampling" not in tools
         assert "confirm_action" not in tools
+
+
+async def test_mount_path_works_without_trailing_slash(stateless_url: str) -> None:
+    # `_session` doesn't follow redirects, so this fails on a 307.
+    async with _session(stateless_url.rstrip("/")) as session:
+        result = await session.call_tool("ping", {})
+
+    assert _text(result) == "pong"
 
 
 async def test_stateless_stream_count_delivers_logs(stateless_url: str) -> None:

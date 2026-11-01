@@ -12,6 +12,9 @@ docker build -t myna:latest .
 docker run --rm -p 8000:8000 \
   -e MYNA_ENV=production \
   -e MYNA_ADMIN_API_KEY=$(openssl rand -hex 32) \
+  -e MYNA_METRICS_API_KEY=$(openssl rand -hex 32) \
+  -e MYNA_MCP_API_KEYS="{\"$(openssl rand -hex 32)\":\"client-a\"}" \
+  -e MYNA_MCP_ALLOWED_HOSTS='["myna.example.com"]' \
   myna:latest
 ```
 
@@ -32,6 +35,11 @@ The image:
 - [ ] Set `MYNA_MCP_API_KEYS` to a JSON object mapping at least one
       bearer token to a caller label. Without it, all `/mcp` traffic
       is rejected with `401`.
+- [ ] Set `MYNA_MCP_ALLOWED_HOSTS` to the hostnames clients use, such as
+      `'["myna.example.com"]'`. Without it, all `/mcp` traffic through a
+      non-localhost name is rejected with `421`. Behind a reverse proxy,
+      make sure it forwards the original `Host` header. Set
+      `MYNA_MCP_ALLOWED_ORIGINS` too if browser-based clients connect.
 - [ ] Tune `MYNA_MCP_RATE_LIMIT_PER_MINUTE` to a value appropriate for
       your expected client behavior. The default (`120`) is a sensible
       starting point; raise it for high-throughput agents, set to `0`
@@ -60,8 +68,15 @@ The image:
 uv sync --no-dev
 uv run uvicorn myna.main:app \
   --host 0.0.0.0 --port 8000 \
-  --proxy-headers --forwarded-allow-ips='*'
+  --proxy-headers --forwarded-allow-ips='<your-proxy-ip>'
 ```
+
+Set `--forwarded-allow-ips` to your proxy's address rather than `*`.
+Otherwise any client can claim any IP in `X-Forwarded-For` and sidestep
+the per-address limits. Without `--proxy-headers` behind a proxy, all
+clients share the proxy's address, including its failed-auth quota.
+The Docker image's default command doesn't set these flags, so pass them
+if you run it behind a proxy.
 
 Scale by running more single-worker instances rather than adding
 `--workers`. The cache, rate limiter, and Prometheus counters are all

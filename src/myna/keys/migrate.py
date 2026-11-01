@@ -66,7 +66,10 @@ def main() -> None:
     try:
         upgrade(url)
     except (SQLAlchemyError, OSError, TimeoutError) as exc:
-        sys.exit(f"Migration failed: {type(exc).__name__}. Check that the database is reachable.")
+        sys.exit(
+            f"Migration failed: {type(exc).__name__}. "
+            "Check that the database is reachable and writable."
+        )
     print("Key store schema is up to date.")
 
 

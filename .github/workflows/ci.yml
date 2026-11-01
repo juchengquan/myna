@@ -78,6 +78,15 @@ jobs:
           echo "POST /mcp/ returned $status"
           test "$status" = 200
 
+      - name: Check SQLite keys on a named volume
+        run: scripts/check_image_sqlite.sh myna:ci myna-ci-data:/data
+
+      - name: Check SQLite keys on a bind mount
+        run: |
+          mkdir keys-data
+          sudo chown 1000:1000 keys-data
+          scripts/check_image_sqlite.sh myna:ci "$PWD/keys-data:/data"
+
   postgres:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest

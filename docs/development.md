@@ -101,7 +101,9 @@ doesn't propose Python upgrades for the image, and the image build fails
 rather than downloading a different Python.
 
 A `docker` job builds the image, starts it with production settings, and
-checks `/api/health` and an authenticated `/mcp` request.
+checks `/api/health` and an authenticated `/mcp` request. It then runs
+`scripts/check_image_sqlite.sh`, which checks that database keys on SQLite work
+and survive a new container, on a named volume and on a bind mount.
 
 A `postgres` job runs the key store tests in `tests/keys` against PostgreSQL,
 which the other test jobs skip. Run them locally by setting

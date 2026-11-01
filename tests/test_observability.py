@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 from fastapi.testclient import TestClient
 from mcp.server.mcpserver.exceptions import ResourceNotFoundError, ToolError
@@ -91,16 +89,21 @@ async def test_prompt_get_increments_metrics() -> None:
 
 
 @pytest.mark.asyncio
-async def test_templated_resource_is_labelled_by_template(mock_weather: Any) -> None:
+async def test_templated_resource_is_labelled_by_template() -> None:
     mcp = build_mcp()
-    template = "weather://locations/{location}"
+    template = "example://items/{item}"
+
+    @mcp.resource(template, name="example-item")
+    def item(item: str) -> str:
+        return item
+
     before = metric_value(RESOURCE_READS, uri=template, caller="anonymous", status="ok")
 
-    list(await mcp.read_resource("weather://locations/Tokyo"))
-    list(await mcp.read_resource("weather://locations/Berlin"))
+    list(await mcp.read_resource("example://items/first"))
+    list(await mcp.read_resource("example://items/second"))
 
     assert metric_value(RESOURCE_READS, uri=template, caller="anonymous", status="ok") == before + 2
-    assert 'uri="weather://locations/Tokyo"' not in render_metrics()[0].decode()
+    assert 'uri="example://items/first"' not in render_metrics()[0].decode()
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx2
 import pytest
 
-from myna.weather_client import (
+from myna.weather.client import (
     LocationNotFound,
     WeatherClient,
     WeatherFetchError,

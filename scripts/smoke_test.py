@@ -73,7 +73,7 @@ async def run(url: str, api_key: str | None = None) -> int:
         tool_names = [t.name for t in tools.tools]
         _dump("tools/list", {"tools": tool_names})
 
-        expected = {"ping", "echo", "get_weather", "stream_count"}
+        expected = {"ping", "echo", "stream_count", "confirm_action"}
         missing = expected - set(tool_names)
         if missing:
             print(f"\nMISSING expected tools: {sorted(missing)}", file=sys.stderr)
@@ -81,16 +81,18 @@ async def run(url: str, api_key: str | None = None) -> int:
 
         _dump("call ping", await session.call_tool("ping", {}))
         _dump("call echo", await session.call_tool("echo", {"message": "hello myna"}))
-        _dump(
-            "call get_weather (Tokyo, celsius)",
-            await session.call_tool("get_weather", {"location": "Tokyo"}),
-        )
-        _dump(
-            "call get_weather (Tokyo, fahrenheit)",
-            await session.call_tool(
-                "get_weather", {"location": "Tokyo", "unit": "fahrenheit"}
-            ),
-        )
+        has_weather = "get_weather" in tool_names
+        if has_weather:
+            _dump(
+                "call get_weather (Tokyo, celsius)",
+                await session.call_tool("get_weather", {"location": "Tokyo"}),
+            )
+            _dump(
+                "call get_weather (Tokyo, fahrenheit)",
+                await session.call_tool(
+                    "get_weather", {"location": "Tokyo", "unit": "fahrenheit"}
+                ),
+            )
 
         progress_events = 0
 
@@ -147,16 +149,17 @@ async def run(url: str, api_key: str | None = None) -> int:
             return 1
 
         _dump("read myna://server-info", await session.read_resource("myna://server-info"))
-        _dump(
-            "read weather://locations/Tokyo",
-            await session.read_resource("weather://locations/Tokyo"),
-        )
+        if has_weather:
+            _dump(
+                "read weather://locations/Tokyo",
+                await session.read_resource("weather://locations/Tokyo"),
+            )
 
         # --- Prompts ---
         prompts = await session.list_prompts()
         _dump("prompts/list", {"prompts": [p.name for p in prompts.prompts]})
 
-        expected_prompts = {"summarize", "weather-report"}
+        expected_prompts = {"summarize"}
         missing_p = expected_prompts - {p.name for p in prompts.prompts}
         if missing_p:
             print(f"\nMISSING expected prompts: {sorted(missing_p)}", file=sys.stderr)
@@ -168,12 +171,13 @@ async def run(url: str, api_key: str | None = None) -> int:
                 "summarize", {"text": "MCP lets agents call tools.", "sentences": "1"}
             ),
         )
-        _dump(
-            "get_prompt weather-report",
-            await session.get_prompt(
-                "weather-report", {"location": "Berlin", "tone": "playful"}
-            ),
-        )
+        if has_weather:
+            _dump(
+                "get_prompt weather-report",
+                await session.get_prompt(
+                    "weather-report", {"location": "Berlin", "tone": "playful"}
+                ),
+            )
 
     return await run_modern(url, headers)
 

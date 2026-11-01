@@ -16,10 +16,41 @@ upstream when desired.
 from __future__ import annotations
 
 import httpx2
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from myna import __version__
-from myna.config import get_settings
+
+
+class WeatherSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="MYNA_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    open_meteo_geocoding_url: str = Field(
+        default="https://geocoding-api.open-meteo.com",
+        description=(
+            "Base URL for the Open-Meteo geocoding API. Used by the "
+            "`get_weather` tool to turn a location name into coordinates. "
+            "Overridable so tests can point at a mock transport."
+        ),
+    )
+    open_meteo_forecast_url: str = Field(
+        default="https://api.open-meteo.com",
+        description=(
+            "Base URL for the Open-Meteo forecast API. Used by the "
+            "`get_weather` tool to fetch current conditions for resolved "
+            "coordinates. Overridable so tests can point at a mock transport."
+        ),
+    )
+    open_meteo_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        description="Per-request timeout for Open-Meteo HTTP calls.",
+    )
 
 
 class CurrentWeather(BaseModel):
@@ -98,7 +129,7 @@ class WeatherClient:
         timeout_seconds: float | None = None,
         transport: httpx2.AsyncBaseTransport | None = None,
     ) -> None:
-        settings = get_settings()
+        settings = WeatherSettings()
         self.geocoding_base_url = geocoding_base_url or settings.open_meteo_geocoding_url
         self.forecast_base_url = forecast_base_url or settings.open_meteo_forecast_url
         self.timeout = timeout_seconds or settings.open_meteo_timeout_seconds

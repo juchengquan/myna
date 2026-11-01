@@ -1,0 +1,83 @@
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Callable
+from typing import Any
+
+import httpx2
+import pytest
+
+from myna.weather import server as weather_server
+from myna.weather.client import WeatherClient
+
+# ---------------------------------------------------------------------------
+# Open-Meteo mock transport
+#
+# Tests that exercise the weather tool / resource / cache need a deterministic
+# upstream that doesn't touch the network. This fixture installs a
+# `httpx2.MockTransport` for the duration of one test, clears the cached
+# `_fetch_celsius` between tests, and tears everything down on exit.
+# ---------------------------------------------------------------------------
+
+
+def _default_open_meteo_handler(request: httpx2.Request) -> httpx2.Response:
+    url = str(request.url)
+    if "/v1/search" in url:
+        name = request.url.params.get("name", "Unknown")
+        return httpx2.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "name": name,
+                        "country": "Testland",
+                        "latitude": 10.0,
+                        "longitude": 20.0,
+                    }
+                ]
+            },
+        )
+    if "/v1/forecast" in url:
+        return httpx2.Response(
+            200,
+            json={
+                "current": {
+                    "time": "2026-05-21T12:00",
+                    "temperature_2m": 21.5,
+                    "relative_humidity_2m": 55,
+                    "wind_speed_10m": 12.0,
+                    "weather_code": 3,
+                }
+            },
+        )
+    return httpx2.Response(404, json={"error": f"unmocked URL: {url}"})
+
+
+HandlerSetter = Callable[[Callable[[httpx2.Request], httpx2.Response]], None]
+
+
+@pytest.fixture()
+async def mock_weather() -> AsyncIterator[HandlerSetter]:
+    """Install a mocked WeatherClient. Yields a setter so tests can swap
+    handlers for specific error scenarios. Async because clearing the
+    shared `_fetch_celsius` cache between tests requires an active event
+    loop — pytest-asyncio (configured `asyncio_mode = "auto"`) gives us
+    one for free here, and using `asyncio.get_event_loop()` directly
+    triggers a DeprecationWarning on Python 3.10+ outside a running loop.
+    """
+    state: dict[str, Any] = {"handler": _default_open_meteo_handler}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return state["handler"](request)
+
+    transport = httpx2.MockTransport(handler)
+    weather_server.set_weather_client(WeatherClient(transport=transport))
+    await weather_server._fetch_celsius._myna_cache.clear()  # type: ignore[attr-defined]
+
+    def use(new_handler: Callable[[httpx2.Request], httpx2.Response]) -> None:
+        state["handler"] = new_handler
+
+    try:
+        yield use
+    finally:
+        weather_server.set_weather_client(None)
+        await weather_server._fetch_celsius._myna_cache.clear()  # type: ignore[attr-defined]

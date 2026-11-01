@@ -31,7 +31,8 @@ Wire it up:
 ```python
 # src/myna/mcp_server.py
 def _register_tools(mcp: MCPServer) -> None:
-    from myna.tools import example, greeting, weather
+    from myna import weather
+    from myna.tools import example, greeting
 
     example.register(mcp)
     greeting.register(mcp)
@@ -48,7 +49,7 @@ That's it — the tool is now visible to MCP clients and via
 - Use **standard Python type hints**. Annotations drive the schema.
 - For structured returns, return a `pydantic.BaseModel` — clients will
   receive both a text representation and a `structuredContent` object
-  (see [`tools/weather.py`](../src/myna/tools/weather.py) for an example).
+  (see [`weather/server.py`](../src/myna/weather/server.py) for an example).
 - Default values become optional parameters in the schema.
 - The **docstring** is the tool description shown to LLMs. Treat it as
   prompt copy — be specific about what the tool does, when to call it,

@@ -19,7 +19,7 @@ so local iteration is friction-free.
 
 ```python
 import asyncio
-import httpx
+import httpx2
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
@@ -27,10 +27,10 @@ from mcp.client.streamable_http import streamable_http_client
 async def main() -> None:
     headers = {"Authorization": "Bearer sk-abc"}
     async with (
-        httpx.AsyncClient(headers=headers, timeout=httpx.Timeout(30.0, read=300.0)) as http_client,
+        httpx2.AsyncClient(headers=headers, timeout=httpx2.Timeout(30.0, read=300.0)) as http_client,
         streamable_http_client(
             "http://localhost:8000/mcp/", http_client=http_client,
-        ) as (read, write, _),
+        ) as (read, write),
         ClientSession(read, write) as session,
     ):
         await session.initialize()
@@ -39,7 +39,7 @@ async def main() -> None:
         print([t.name for t in tools.tools])
 
         result = await session.call_tool("get_weather", {"location": "Berlin"})
-        print(result.structuredContent)
+        print(result.structured_content)
 
 
 asyncio.run(main())
@@ -85,10 +85,13 @@ await client.close();
 - The MCP endpoint expects `POST` with
   `Accept: application/json, text/event-stream`. Plain `GET /mcp/` will
   not return useful output — use a real MCP client.
-- Myna runs in stateless mode by default: clients should not assume a
-  long-lived session and should re-initialize on reconnect. Progress
-  notifications and the sampling and elicitation tools need a server
-  running with `MYNA_MCP_STATELESS=false`.
+- Myna serves both 2026-07-28 clients and legacy clients that use the
+  `initialize` handshake. It runs in stateless mode by default, so legacy
+  clients should not assume a long-lived session and should re-initialize
+  on reconnect.
+- The sampling and elicitation tools need a server running with
+  `MYNA_MCP_STATELESS=false`.
+- Request bodies over 4 MiB get `413`.
 - A `421 Invalid Host header` response means the hostname in the URL isn't
   in `MYNA_MCP_ALLOWED_HOSTS`. A `403 Invalid Origin header` response means
   a browser client's origin isn't in `MYNA_MCP_ALLOWED_ORIGINS`.

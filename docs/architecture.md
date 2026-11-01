@@ -7,7 +7,7 @@ routing, dependency injection, OpenAPI docs, exception handling, the
 admin REST surface, and any future HTTP endpoints you add.
 
 The [official MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
-(`FastMCP`) is used as a **mounted sub-application** for one thing only:
+(`MCPServer`) is used as a **mounted sub-application** for one thing only:
 correctly speaking the MCP protocol on the `/mcp` URL. Everything else
 — tools as plain Python, your own routes, middleware, auth, settings —
 stays in normal FastAPI / Python idioms.
@@ -17,7 +17,7 @@ So the layering is:
 | Layer | Owned by | Why |
 | --- | --- | --- |
 | ASGI host, lifespan, routing, OpenAPI, admin API | **FastAPI** | Ergonomic, familiar, full control |
-| MCP wire protocol on `/mcp` (JSON-RPC framing, Streamable HTTP + SSE, session handling, `initialize`/`tools/list`/`tools/call`, schema generation from type hints) | **`FastMCP`** (mounted) | Spec-compliant, tracks MCP revisions for us |
+| MCP wire protocol on `/mcp` (JSON-RPC framing, Streamable HTTP + SSE, session handling, `initialize`/`tools/list`/`tools/call`, schema generation from type hints) | **`MCPServer`** (mounted) | Spec-compliant, tracks MCP revisions for us |
 | Tool implementations | **Plain Python** in `myna/tools/*` | No SDK lock-in beyond the `@mcp.tool()` decorator |
 
 We use the SDK rather than reimplementing MCP as FastAPI routes because
@@ -30,7 +30,7 @@ still evolving. Mounting keeps our surface area small.
 The single ASGI process exposes two surfaces, sharing config, logging,
 and lifespan:
 
-1. **MCP server** at `/mcp` — handled by the mounted `FastMCP` sub-app
+1. **MCP server** at `/mcp` — handled by the mounted `MCPServer` sub-app
    (Streamable HTTP transport).
 2. **Management/admin REST API** at `/api` — pure FastAPI routes:
    health checks and tool introspection.
@@ -42,13 +42,13 @@ and lifespan:
                        │          FastAPI app  (myna.main)            │
                        │  ── owns: lifespan, routing, OpenAPI, errors │
                        │                                              │
-MCP client  ── /mcp ──▶│   mount  ── FastMCP.streamable_http_app()    │   ← MCP SDK
+MCP client  ── /mcp ──▶│   mount  ── MCPServer.streamable_http_app()    │   ← MCP SDK
                        │             (JSON-RPC + Streamable HTTP/SSE) │     territory
                        │                                              │
 HTTP client ── /api ──▶│   router ── myna.api (health, admin, ...)    │   ← pure FastAPI
                        └──────────────────────────────────────────────┘
                                        │
-                              app.state.mcp = FastMCP
+                              app.state.mcp = MCPServer
                               │
                               ├── tools     (myna.tools.*)
                               ├── resources (myna.resources.*)
@@ -65,9 +65,9 @@ is the SDK's responsibility (MCP wire protocol).
 - The MCP endpoint only accepts the hosts in `MYNA_MCP_ALLOWED_HOSTS`, which
   defaults to localhost. This protects local servers from DNS rebinding, so
   remote deployments must add their hostname or every request gets a `421`.
-- The FastMCP `session_manager` is started/stopped by FastAPI's
+- The MCPServer `session_manager` is started/stopped by FastAPI's
   `lifespan` context manager — see `src/myna/main.py`.
-- A fresh `FastMCP` instance is built per app (`build_mcp()` in
+- A fresh `MCPServer` instance is built per app (`build_mcp()` in
   `src/myna/mcp_server.py`). `StreamableHTTPSessionManager.run()` can
   only be called once per instance, so we do **not** cache it as a
   module-level singleton.
@@ -110,18 +110,21 @@ src/myna/
 
 - **FastAPI hosts, SDK speaks MCP.** We use FastAPI for everything we
   want to own (routing, DI, auth, settings, OpenAPI) and delegate only
-  the MCP wire protocol to `FastMCP`. This keeps our codebase in
+  the MCP wire protocol to `MCPServer`. This keeps our codebase in
   ordinary FastAPI/Python idioms while staying spec-compliant for free.
-- **Mount, don't fork.** FastMCP is mounted into FastAPI rather than run
+- **Mount, don't fork.** MCPServer is mounted into FastAPI rather than run
   as a separate process, so the admin API and the MCP server share state
   (`app.state.mcp`) and are deployed as one unit.
 - **Per-app MCP instance.** Required by the SDK's session manager
   lifecycle; also makes `TestClient` and multi-worker setups predictable.
 - **Pluggable tool registration.** Each `tools/<name>.py` exposes a
-  `register(mcp: FastMCP)` function called from
+  `register(mcp: MCPServer)` function called from
   `mcp_server._register_tools()`. Adding a tool means adding a module
   and one line in that registrar — no decorator magic at import time,
   so test isolation stays clean.
+- **Observe through the public API.** `ObservedMCPServer` overrides the
+  server's public `call_tool`, `read_resource`, and `get_prompt`, which the
+  protocol handlers also call, so there's no patching of SDK internals.
 - **Stateless HTTP by default.** Each request is self-contained, which
   is friendlier to horizontal scaling and load-balancing than
   session-affinity HTTP. See below for what this gives up.
@@ -129,16 +132,26 @@ src/myna/
 ## Stateless and stateful mode
 
 `MYNA_MCP_STATELESS` sets the SDK's `stateless_http` option. It defaults
-to `true`.
+to `true`, and it only affects legacy clients, which connect with the
+`initialize` handshake used up to spec 2025-11-25. The SDK routes each
+request by its protocol version, so one endpoint serves both eras.
+2026-07-28 clients never have a session.
 
-| | Stateless (default) | Stateful |
-| --- | --- | --- |
-| Multiple replicas | No session affinity needed | Session affinity needed |
-| Tool results and log events | Delivered | Delivered |
-| Progress notifications | Dropped | Delivered |
-| Sampling and elicitation tools | Not registered | Registered |
+| | Legacy client, stateless (default) | Legacy client, stateful | 2026-07-28 client |
+| --- | --- | --- | --- |
+| Multiple replicas | No session affinity needed | Session affinity needed | No session affinity needed |
+| Tool results | Delivered | Delivered | Delivered |
+| Log events | Delivered | Delivered | Delivered if the client asks with a log level |
+| Progress notifications | Delivered | Delivered | Delivered |
+| Sampling and elicitation tools | Not registered | Registered | Follows the server's mode |
 
-Sampling and elicitation send a request to the client in the middle of a
-tool call and wait for the reply. In stateless mode that round trip can't
-finish and the call hangs, so `build_mcp()` doesn't register those tools.
-`tests/test_wire.py` covers both modes over the real transport.
+Sampling and elicitation need a way to ask the client a question. A legacy
+client in stateless mode has no channel for that, so `build_mcp()` doesn't
+register those tools in stateless mode. Those tools use resolvers, so the
+SDK picks how to ask for each connection: a request mid-call for a legacy
+client, or a question in the tool result for a 2026-07-28 client.
+
+In stateful mode, the SDK closes a legacy session after 30 idle minutes and
+refuses new ones past 10,000 per process, with `503`. Either limit applies
+per process. `tests/test_wire.py` covers both modes and both eras over the
+real transport.

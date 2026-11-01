@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Literal
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import BaseModel, Field
 
 from myna.cache import cached
@@ -62,12 +63,7 @@ async def _fetch_celsius(location: str) -> WeatherReport:
     branch doesn't double the upstream traffic when a client asks for
     both celsius and fahrenheit on the same place.
     """
-    try:
-        payload = await get_weather_client().fetch_current(location)
-    except LocationNotFound as exc:
-        raise ValueError(str(exc)) from exc
-    except WeatherFetchError as exc:
-        raise RuntimeError(f"weather fetch failed: {exc}") from exc
+    payload = await get_weather_client().fetch_current(location)
 
     return WeatherReport(
         location=payload.resolved_name,
@@ -96,7 +92,7 @@ async def fetch_weather(location: str, unit: Unit = "celsius") -> WeatherReport:
     return report
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     @mcp.tool()
     async def get_weather(location: str, unit: Unit = "celsius") -> WeatherReport:
         """Return the current weather for a location, via Open-Meteo.
@@ -114,5 +110,10 @@ def register(mcp: FastMCP) -> None:
             unit: Temperature unit for the returned report.
         """
         if not location.strip():
-            raise ValueError("location must not be empty")
-        return await fetch_weather(location, unit)
+            raise ToolError("location must not be empty")
+        try:
+            return await fetch_weather(location, unit)
+        except LocationNotFound as exc:
+            raise ToolError(str(exc)) from exc
+        except WeatherFetchError as exc:
+            raise ToolError(f"weather fetch failed: {exc}") from exc

@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ResourceNotFoundError, ToolError
 
 from myna.mcp_server import build_mcp
 from myna.observability import (
@@ -112,7 +112,7 @@ async def test_unregistered_targets_are_labelled_unknown() -> None:
 
     with pytest.raises(ToolError):
         await mcp.call_tool("no-such-tool", {})
-    with pytest.raises(ValueError):
+    with pytest.raises(ResourceNotFoundError):
         await mcp.read_resource("myna://no-such-resource")
     with pytest.raises(ValueError):
         await mcp.get_prompt("no-such-prompt")

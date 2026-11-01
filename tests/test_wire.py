@@ -14,13 +14,15 @@ import socket
 import threading
 import time
 from collections.abc import AsyncIterator, Iterator
-from typing import Any
+from typing import Any, cast
 
-import httpx
+import httpx2
 import pytest
 import uvicorn
 from mcp import ClientSession
+from mcp.client import Client
 from mcp.client.streamable_http import streamable_http_client
+from mcp.shared.exceptions import MCPError
 from mcp.types import (
     CreateMessageResult,
     ElicitResult,
@@ -30,14 +32,19 @@ from mcp.types import (
 
 from myna.config import get_settings
 from myna.main import create_app
+from myna.observability import TOOL_CALLS, metric_value
 
 TIMEOUT_SECONDS = 10.0
+MODERN_PROTOCOL = "2026-07-28"
+MISSING_CLIENT_CAPABILITY = -32021
 
 
 @contextlib.contextmanager
-def _live_server(monkeypatch: pytest.MonkeyPatch, *, stateless: bool) -> Iterator[str]:
+def _live_server(
+    monkeypatch: pytest.MonkeyPatch, *, stateless: bool, api_keys: str = "{}"
+) -> Iterator[str]:
     monkeypatch.setenv("MYNA_ENV", "development")
-    monkeypatch.setenv("MYNA_MCP_API_KEYS", "{}")
+    monkeypatch.setenv("MYNA_MCP_API_KEYS", api_keys)
     monkeypatch.setenv("MYNA_MCP_RATE_LIMIT_PER_MINUTE", "0")
     monkeypatch.setenv("MYNA_MCP_STATELESS", str(stateless).lower())
     get_settings.cache_clear()
@@ -74,15 +81,32 @@ def stateful_url(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
 
 
 @contextlib.asynccontextmanager
-async def _session(url: str, **callbacks: Any) -> AsyncIterator[ClientSession]:
+async def _session(
+    url: str, headers: dict[str, str] | None = None, **callbacks: Any
+) -> AsyncIterator[ClientSession]:
+    """A legacy connection: the `initialize` handshake, up to spec 2025-11-25."""
     async with (
         asyncio.timeout(TIMEOUT_SECONDS),
-        httpx.AsyncClient(follow_redirects=False) as http_client,
-        streamable_http_client(url, http_client=http_client) as (read, write, _),
+        httpx2.AsyncClient(headers=headers, follow_redirects=False) as http_client,
+        streamable_http_client(url, http_client=http_client) as (read, write),
         ClientSession(read, write, **callbacks) as session,
     ):
         await session.initialize()
         yield session
+
+
+@contextlib.asynccontextmanager
+async def _modern_client(
+    url: str, headers: dict[str, str] | None = None, **callbacks: Any
+) -> AsyncIterator[Client]:
+    """A modern connection: sessionless, spec 2026-07-28."""
+    async with (
+        asyncio.timeout(TIMEOUT_SECONDS),
+        httpx2.AsyncClient(headers=headers, follow_redirects=False) as http_client,
+        Client(streamable_http_client(url, http_client=http_client), **callbacks) as client,
+    ):
+        assert client.protocol_version == MODERN_PROTOCOL
+        yield client
 
 
 async def _on_sampling(context: Any, params: Any) -> CreateMessageResult:
@@ -120,61 +144,124 @@ async def test_mount_path_works_without_trailing_slash(stateless_url: str) -> No
     assert _text(result) == "pong"
 
 
-async def test_stateless_stream_count_delivers_logs(stateless_url: str) -> None:
+@pytest.mark.parametrize("fixture", ["stateless_url", "stateful_url"])
+async def test_legacy_stream_count_delivers_progress_and_logs(
+    fixture: str, request: pytest.FixtureRequest
+) -> None:
+    url = cast(str, request.getfixturevalue(fixture))
     logs: list[Any] = []
+    progress: list[float] = []
 
     async def on_log(params: LoggingMessageNotificationParams) -> None:
         logs.append(params.data)
 
-    async with _session(stateless_url, logging_callback=on_log) as session:
-        result = await session.call_tool("stream_count", {"n": 2, "delay_ms": 0})
-
-    assert _text(result) == "counted to 2"
-    assert logs == ["tick 1", "tick 2"]
-
-
-async def test_stateful_stream_count_delivers_progress(stateful_url: str) -> None:
-    progress: list[float] = []
-
     async def on_progress(value: float, total: float | None, message: str | None) -> None:
         progress.append(value)
 
-    async with _session(stateful_url) as session:
-        await session.call_tool(
+    async with _session(url, logging_callback=on_log) as session:
+        result = await session.call_tool(
             "stream_count", {"n": 2, "delay_ms": 0}, progress_callback=on_progress
         )
 
+    assert _text(result) == "counted to 2"
     assert progress == [1.0, 2.0]
+    assert logs == ["tick 1", "tick 2"]
 
 
-async def test_stateful_sampling_round_trip(stateful_url: str) -> None:
+async def test_stateful_legacy_sampling_round_trip(stateful_url: str) -> None:
     async with _session(stateful_url, sampling_callback=_on_sampling) as session:
         result = await session.call_tool("summarize_via_sampling", {"text": "hello"})
 
-    assert not result.isError
+    assert not result.is_error
     assert _text(result) == "client summary"
 
 
-async def test_stateful_elicitation_round_trip(stateful_url: str) -> None:
+async def test_stateful_legacy_elicitation_round_trip(stateful_url: str) -> None:
     async with _session(stateful_url, elicitation_callback=_on_elicitation) as session:
         result = await session.call_tool("confirm_action", {"action": "deploy"})
 
-    assert not result.isError
+    assert not result.is_error
     assert "approved" in _text(result)
 
 
 @pytest.mark.parametrize(
-    ("tool", "arguments", "expected"),
+    ("tool", "arguments"),
     [
-        ("summarize_via_sampling", {"text": "hello"}, "sampling"),
-        ("confirm_action", {"action": "deploy"}, "elicitation"),
+        ("summarize_via_sampling", {"text": "hello"}),
+        ("confirm_action", {"action": "deploy"}),
     ],
 )
-async def test_stateful_tools_error_without_client_capability(
-    stateful_url: str, tool: str, arguments: dict[str, str], expected: str
+async def test_stateful_legacy_tools_refused_without_client_capability(
+    stateful_url: str, tool: str, arguments: dict[str, str]
 ) -> None:
     async with _session(stateful_url) as session:
-        result = await session.call_tool(tool, arguments)
+        with pytest.raises(MCPError) as exc_info:
+            await session.call_tool(tool, arguments)
 
-    assert result.isError
-    assert expected in _text(result)
+    assert exc_info.value.error.code == MISSING_CLIENT_CAPABILITY
+
+
+@pytest.mark.parametrize("fixture", ["stateless_url", "stateful_url"])
+async def test_modern_stream_count_delivers_progress_and_logs(
+    fixture: str, request: pytest.FixtureRequest
+) -> None:
+    url = cast(str, request.getfixturevalue(fixture))
+    logs: list[Any] = []
+    progress: list[float] = []
+
+    async def on_log(params: LoggingMessageNotificationParams) -> None:
+        logs.append(params.data)
+
+    async def on_progress(value: float, total: float | None, message: str | None) -> None:
+        progress.append(value)
+
+    async with _modern_client(url, logging_callback=on_log, log_level="info") as client:
+        result = await client.call_tool(
+            "stream_count", {"n": 2, "delay_ms": 0}, progress_callback=on_progress
+        )
+
+    assert _text(result) == "counted to 2"
+    assert progress == [1.0, 2.0]
+    assert logs == ["tick 1", "tick 2"]
+
+
+async def test_modern_sampling_round_trip(stateful_url: str) -> None:
+    async with _modern_client(stateful_url, sampling_callback=_on_sampling) as client:
+        result = await client.call_tool("summarize_via_sampling", {"text": "hello"})
+
+    assert not result.is_error
+    assert _text(result) == "client summary"
+
+
+async def test_modern_elicitation_round_trip(stateful_url: str) -> None:
+    async with _modern_client(stateful_url, elicitation_callback=_on_elicitation) as client:
+        result = await client.call_tool("confirm_action", {"action": "deploy"})
+
+    assert not result.is_error
+    assert "approved" in _text(result)
+
+
+@pytest.mark.parametrize("stateless", [True, False])
+async def test_caller_reaches_metrics_on_both_protocol_eras(
+    monkeypatch: pytest.MonkeyPatch, stateless: bool
+) -> None:
+    token = {"Authorization": "Bearer sk-wire"}
+    labels = {"tool": "ping", "caller": "wire-client", "status": "ok"}
+    before = metric_value(TOOL_CALLS, **labels)
+
+    api_keys = '{"sk-wire":"wire-client"}'
+    with _live_server(monkeypatch, stateless=stateless, api_keys=api_keys) as url:
+        async with _session(url, headers=token) as session:
+            await session.call_tool("ping", {})
+        async with _modern_client(url, headers=token) as client:
+            await client.call_tool("ping", {})
+
+    assert metric_value(TOOL_CALLS, **labels) == before + 2
+
+
+async def test_tool_errors_reach_the_client(stateless_url: str) -> None:
+    async with _session(stateless_url) as session:
+        result = await session.call_tool("stream_count", {"n": 0})
+
+    assert result.is_error
+    assert "n must be between 1 and 20" in _text(result)

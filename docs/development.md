@@ -31,10 +31,11 @@ uv run pytest --cov=myna --cov-report=term-missing
 ```
 
 Most of the pytest suite exercises tools **in-process** against the
-`FastMCP` instance — no HTTP layer. Each test gets a fresh app via the
+`MCPServer` instance — no HTTP layer. Each test gets a fresh app via the
 `client` fixture in [`tests/conftest.py`](../tests/conftest.py).
 [`tests/test_wire.py`](../tests/test_wire.py) starts real local servers
-and covers stateless and stateful mode over Streamable HTTP.
+and covers stateless and stateful mode, and both protocol eras, over
+Streamable HTTP.
 
 ## Lint and type-check
 
@@ -63,10 +64,10 @@ uv run python scripts/smoke_test.py
 uv run python scripts/smoke_test.py --url http://localhost:8000/mcp/
 ```
 
-The script initializes a real MCP session and exercises the tools,
-resources, and prompts. It exits non-zero if anything expected is
-missing. Against a server with `MYNA_MCP_STATELESS=false`, it also fails
-if progress notifications don't arrive, or if `summarize_via_sampling` or
+The script connects as a legacy client and as a 2026-07-28 client, and
+exercises the tools, resources, and prompts. It exits non-zero if anything expected is
+missing, or if progress notifications don't arrive. Against a server with
+`MYNA_MCP_STATELESS=false`, it also fails if `summarize_via_sampling` or
 `confirm_action` errors or doesn't finish within 15 seconds.
 
 ## Adding / updating dependencies

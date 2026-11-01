@@ -11,7 +11,7 @@ from myna.api import router as api_router
 from myna.api.auth import require_metrics
 from myna.config import get_settings
 from myna.logging_config import configure_logging, get_logger
-from myna.mcp_server import build_mcp
+from myna.mcp_server import build_mcp, build_mcp_app
 from myna.middleware import MCPAuthMiddleware, MountPathMiddleware, RateLimitMiddleware
 from myna.observability import render_metrics
 from myna.rate_limit import RateLimiter
@@ -26,7 +26,7 @@ def create_app() -> FastAPI:
     tracer_provider = setup_tracing(settings)
 
     mcp = build_mcp()
-    mcp_app = mcp.streamable_http_app()
+    mcp_app = build_mcp_app(mcp)
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -66,7 +66,7 @@ def create_app() -> FastAPI:
     #   request -> MCPAuthMiddleware (sets current_caller)
     #           -> RateLimitMiddleware (reads current_caller)
     #           -> MountPathMiddleware (serves /mcp without a redirect)
-    #           -> mounted FastMCP app
+    #           -> mounted MCPServer app
     rate_limiter = RateLimiter(settings.mcp_rate_limit_per_minute)
     app.state.rate_limiter = rate_limiter
     app.add_middleware(MountPathMiddleware, prefix=settings.mcp_mount_path)

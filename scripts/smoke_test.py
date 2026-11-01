@@ -1,9 +1,10 @@
 """End-to-end smoke test for a running Myna MCP server.
 
-Connects to the Streamable HTTP endpoint as a real MCP client, lists
-the registered tools, and calls each of the example tools. Use this
-to verify the wire protocol is working — `pytest` exercises tools
-in-process and won't catch transport-level regressions.
+Connects to the Streamable HTTP endpoint as a real MCP client, once as a
+legacy client and once as a 2026-07-28 client. It lists the registered
+tools and calls each of the example tools. Use this to verify the wire
+protocol is working — most of `pytest` exercises tools in-process and
+won't catch transport-level regressions.
 
 Usage:
     # In one shell, start the server:
@@ -22,8 +23,9 @@ import json
 import sys
 from typing import Any
 
-import httpx
+import httpx2
 from mcp import ClientSession
+from mcp.client import Client
 from mcp.client.streamable_http import streamable_http_client
 from mcp.types import (
     CreateMessageResult,
@@ -37,6 +39,8 @@ INTERACTIVE_TOOLS = {
     "confirm_action": {"action": "run the smoke test"},
 }
 INTERACTIVE_TIMEOUT_SECONDS = 15.0
+MODERN_PROTOCOL = "2026-07-28"
+_TIMEOUT = httpx2.Timeout(30.0, read=300.0)
 
 
 def _dump(label: str, value: Any) -> None:
@@ -78,8 +82,8 @@ async def run(url: str, api_key: str | None = None) -> int:
     if api_key:
         headers = {"Authorization": f"Bearer {api_key}"}
     async with (
-        httpx.AsyncClient(headers=headers, timeout=httpx.Timeout(30.0, read=300.0)) as http_client,
-        streamable_http_client(url, http_client=http_client) as (read, write, _),
+        httpx2.AsyncClient(headers=headers, timeout=_TIMEOUT) as http_client,
+        streamable_http_client(url, http_client=http_client) as (read, write),
         ClientSession(
             read,
             write,
@@ -129,13 +133,12 @@ async def run(url: str, api_key: str | None = None) -> int:
         )
         _dump("stream_count final", stream_result)
 
-        # The interactive tools are only registered in stateful mode, which
-        # is also the only mode where progress notifications reach the client.
-        if INTERACTIVE_TOOLS.keys() <= set(tool_names):
-            if progress_events != 5:
-                print(f"\nExpected 5 progress events, got {progress_events}", file=sys.stderr)
-                return 1
+        if progress_events != 5:
+            print(f"\nExpected 5 progress events, got {progress_events}", file=sys.stderr)
+            return 1
 
+        # The interactive tools are only registered in stateful mode.
+        if INTERACTIVE_TOOLS.keys() <= set(tool_names):
             for name, arguments in INTERACTIVE_TOOLS.items():
                 try:
                     async with asyncio.timeout(INTERACTIVE_TIMEOUT_SECONDS):
@@ -144,11 +147,11 @@ async def run(url: str, api_key: str | None = None) -> int:
                     print(f"\n{name} did not finish in time", file=sys.stderr)
                     return 1
                 _dump(f"call {name}", result)
-                if result.isError:
+                if result.is_error:
                     print(f"\n{name} returned an error", file=sys.stderr)
                     return 1
         else:
-            print("\nServer is stateless: skipping progress and interactive tool checks.")
+            print("\nServer is stateless: skipping interactive tool checks.")
 
         # --- Resources ---
         resources = await session.list_resources()
@@ -157,7 +160,7 @@ async def run(url: str, api_key: str | None = None) -> int:
             "resources/list",
             {
                 "resources": [r.name for r in resources.resources],
-                "templates": [t.uriTemplate for t in templates.resourceTemplates],
+                "templates": [t.uri_template for t in templates.resource_templates],
             },
         )
 
@@ -195,6 +198,50 @@ async def run(url: str, api_key: str | None = None) -> int:
                 "weather-report", {"location": "Berlin", "tone": "playful"}
             ),
         )
+
+    return await run_modern(url, headers)
+
+
+async def run_modern(url: str, headers: dict[str, str] | None) -> int:
+    print("\n=== 2026-07-28 client ===")
+    progress_events = 0
+
+    async def count_progress(progress: float, total: float | None, message: str | None) -> None:
+        nonlocal progress_events
+        progress_events += 1
+
+    async with (
+        httpx2.AsyncClient(headers=headers, timeout=_TIMEOUT) as http_client,
+        Client(
+            streamable_http_client(url, http_client=http_client),
+            logging_callback=_on_log,
+            log_level="info",
+            sampling_callback=_on_sampling,
+            elicitation_callback=_on_elicitation,
+        ) as client,
+    ):
+        print(f"protocol version: {client.protocol_version}")
+        if client.protocol_version != MODERN_PROTOCOL:
+            print(f"\nExpected protocol {MODERN_PROTOCOL}", file=sys.stderr)
+            return 1
+
+        tool_names = {tool.name for tool in (await client.list_tools()).tools}
+        _dump("call ping", await client.call_tool("ping", {}))
+        await client.call_tool(
+            "stream_count", {"n": 5, "delay_ms": 0}, progress_callback=count_progress
+        )
+        if progress_events != 5:
+            print(f"\nExpected 5 progress events, got {progress_events}", file=sys.stderr)
+            return 1
+
+        if INTERACTIVE_TOOLS.keys() <= tool_names:
+            for name, arguments in INTERACTIVE_TOOLS.items():
+                async with asyncio.timeout(INTERACTIVE_TIMEOUT_SECONDS):
+                    result = await client.call_tool(name, arguments)
+                _dump(f"call {name}", result)
+                if result.is_error:
+                    print(f"\n{name} returned an error", file=sys.stderr)
+                    return 1
 
     print("\nSmoke test OK")
     return 0

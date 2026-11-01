@@ -91,7 +91,14 @@ Always commit `uv.lock` together with the `pyproject.toml` change.
 4. `uv run mypy src`
 5. `uv run pytest --cov=myna --cov-report=term-missing`
 
-The job matrix covers Python 3.11 and 3.12.
+The job matrix covers Python 3.11 through 3.14, which matches
+`requires-python` in `pyproject.toml`.
+
+To support a new Python version, add it to the matrix, raise the cap in
+`requires-python`, and run `uv lock`. Move the Docker image to a new version
+in a separate PR, and only to a version already in the matrix. Dependabot
+doesn't propose Python upgrades for the image, and the image build fails
+rather than downloading a different Python.
 
 A `docker` job builds the image, starts it with production settings, and
 checks `/api/health` and an authenticated `/mcp` request.

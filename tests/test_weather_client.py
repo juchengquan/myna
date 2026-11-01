@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import httpx
+import httpx2
 import pytest
 
 from myna.weather_client import (
@@ -11,7 +11,7 @@ from myna.weather_client import (
 )
 
 
-def _make_client(handler: httpx.MockTransport | None = None) -> WeatherClient:
+def _make_client(handler: httpx2.MockTransport | None = None) -> WeatherClient:
     return WeatherClient(
         geocoding_base_url="https://geo.test",
         forecast_base_url="https://api.test",
@@ -21,14 +21,14 @@ def _make_client(handler: httpx.MockTransport | None = None) -> WeatherClient:
 
 
 def _handler(geo_status: int = 200, geo_body: dict | None = None,
-             fc_status: int = 200, fc_body: dict | None = None) -> httpx.MockTransport:
-    def h(request: httpx.Request) -> httpx.Response:
+             fc_status: int = 200, fc_body: dict | None = None) -> httpx2.MockTransport:
+    def h(request: httpx2.Request) -> httpx2.Response:
         if "/v1/search" in str(request.url):
-            return httpx.Response(geo_status, json=geo_body or {})
+            return httpx2.Response(geo_status, json=geo_body or {})
         if "/v1/forecast" in str(request.url):
-            return httpx.Response(fc_status, json=fc_body or {})
-        return httpx.Response(404)
-    return httpx.MockTransport(h)
+            return httpx2.Response(fc_status, json=fc_body or {})
+        return httpx2.Response(404)
+    return httpx2.MockTransport(h)
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 from mcp.server.mcpserver.exceptions import ResourceError, ResourceNotFoundError
 
@@ -54,7 +54,7 @@ async def test_weather_template_resolves(mock_weather: Any) -> None:
 
 @pytest.mark.asyncio
 async def test_weather_template_reports_unknown_location(mock_weather: Any) -> None:
-    mock_weather(lambda request: httpx.Response(200, json={"results": []}))
+    mock_weather(lambda request: httpx2.Response(200, json={"results": []}))
     mcp = build_mcp()
     with pytest.raises(ResourceNotFoundError, match="Nowhere"):
         await mcp.read_resource("weather://locations/Nowhere")
@@ -62,7 +62,7 @@ async def test_weather_template_reports_unknown_location(mock_weather: Any) -> N
 
 @pytest.mark.asyncio
 async def test_weather_template_reports_upstream_failure(mock_weather: Any) -> None:
-    mock_weather(lambda request: httpx.Response(500))
+    mock_weather(lambda request: httpx2.Response(500))
     mcp = build_mcp()
     with pytest.raises(ResourceError, match="weather fetch failed"):
         await mcp.read_resource("weather://locations/Tokyo")

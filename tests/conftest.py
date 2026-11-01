@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
@@ -25,16 +25,16 @@ def client() -> Iterator[TestClient]:
 #
 # Tests that exercise the weather tool / resource / cache need a deterministic
 # upstream that doesn't touch the network. This fixture installs a
-# `httpx.MockTransport` for the duration of one test, clears the cached
+# `httpx2.MockTransport` for the duration of one test, clears the cached
 # `_fetch_celsius` between tests, and tears everything down on exit.
 # ---------------------------------------------------------------------------
 
 
-def _default_open_meteo_handler(request: httpx.Request) -> httpx.Response:
+def _default_open_meteo_handler(request: httpx2.Request) -> httpx2.Response:
     url = str(request.url)
     if "/v1/search" in url:
         name = request.url.params.get("name", "Unknown")
-        return httpx.Response(
+        return httpx2.Response(
             200,
             json={
                 "results": [
@@ -48,7 +48,7 @@ def _default_open_meteo_handler(request: httpx.Request) -> httpx.Response:
             },
         )
     if "/v1/forecast" in url:
-        return httpx.Response(
+        return httpx2.Response(
             200,
             json={
                 "current": {
@@ -60,10 +60,10 @@ def _default_open_meteo_handler(request: httpx.Request) -> httpx.Response:
                 }
             },
         )
-    return httpx.Response(404, json={"error": f"unmocked URL: {url}"})
+    return httpx2.Response(404, json={"error": f"unmocked URL: {url}"})
 
 
-HandlerSetter = Callable[[Callable[[httpx.Request], httpx.Response]], None]
+HandlerSetter = Callable[[Callable[[httpx2.Request], httpx2.Response]], None]
 
 
 @pytest.fixture()
@@ -77,14 +77,14 @@ async def mock_weather() -> AsyncIterator[HandlerSetter]:
     """
     state: dict[str, Any] = {"handler": _default_open_meteo_handler}
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         return state["handler"](request)
 
-    transport = httpx.MockTransport(handler)
+    transport = httpx2.MockTransport(handler)
     weather_tool.set_weather_client(WeatherClient(transport=transport))
     await weather_tool._fetch_celsius._myna_cache.clear()  # type: ignore[attr-defined]
 
-    def use(new_handler: Callable[[httpx.Request], httpx.Response]) -> None:
+    def use(new_handler: Callable[[httpx2.Request], httpx2.Response]) -> None:
         state["handler"] = new_handler
 
     try:

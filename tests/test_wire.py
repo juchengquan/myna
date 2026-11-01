@@ -41,8 +41,14 @@ MISSING_CLIENT_CAPABILITY = -32021
 
 @contextlib.contextmanager
 def _live_server(
-    monkeypatch: pytest.MonkeyPatch, *, stateless: bool, api_keys: str = "{}"
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    stateless: bool,
+    api_keys: str = "{}",
+    env: dict[str, str] | None = None,
 ) -> Iterator[str]:
+    for name, value in (env or {}).items():
+        monkeypatch.setenv(name, value)
     monkeypatch.setenv("MYNA_ENV", "development")
     monkeypatch.setenv("MYNA_MCP_API_KEYS", api_keys)
     monkeypatch.setenv("MYNA_MCP_RATE_LIMIT_PER_MINUTE", "0")
@@ -265,3 +271,80 @@ async def test_tool_errors_reach_the_client(stateless_url: str) -> None:
 
     assert result.is_error
     assert "n must be between 1 and 20" in _text(result)
+
+
+INITIALIZE = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2025-11-25",
+        "capabilities": {},
+        "clientInfo": {"name": "wire-test", "version": "0"},
+    },
+}
+MCP_HEADERS = {"Accept": "application/json, text/event-stream"}
+
+
+async def _status_counts(tool: str) -> tuple[float, float]:
+    labels = {"tool": tool, "caller": "anonymous"}
+    return (
+        metric_value(TOOL_CALLS, status="ok", **labels),
+        metric_value(TOOL_CALLS, status="input_required", **labels),
+    )
+
+
+async def test_modern_question_is_not_counted_as_a_completed_call(stateful_url: str) -> None:
+    ok_before, asked_before = await _status_counts("confirm_action")
+
+    async with _modern_client(stateful_url, elicitation_callback=_on_elicitation) as client:
+        await client.call_tool("confirm_action", {"action": "deploy"})
+
+    ok_after, asked_after = await _status_counts("confirm_action")
+    assert ok_after == ok_before + 1
+    assert asked_after == asked_before + 1
+
+
+async def test_legacy_question_is_counted_once(stateful_url: str) -> None:
+    ok_before, asked_before = await _status_counts("confirm_action")
+
+    async with _session(stateful_url, elicitation_callback=_on_elicitation) as session:
+        await session.call_tool("confirm_action", {"action": "deploy"})
+
+    ok_after, asked_after = await _status_counts("confirm_action")
+    assert ok_after == ok_before + 1
+    assert asked_after == asked_before
+
+
+async def test_max_sessions_refuses_new_sessions(monkeypatch: pytest.MonkeyPatch) -> None:
+    env = {"MYNA_MCP_MAX_SESSIONS": "1"}
+    with _live_server(monkeypatch, stateless=False, env=env) as url:
+        async with (
+            asyncio.timeout(TIMEOUT_SECONDS),
+            httpx2.AsyncClient(headers=MCP_HEADERS) as http,
+        ):
+            first = await http.post(url, json=INITIALIZE)
+            second = await http.post(url, json=INITIALIZE)
+
+    assert first.status_code == 200
+    assert second.status_code == 503
+
+
+async def test_idle_session_expires(monkeypatch: pytest.MonkeyPatch) -> None:
+    env = {"MYNA_MCP_SESSION_IDLE_TIMEOUT_SECONDS": "0.2"}
+    with _live_server(monkeypatch, stateless=False, env=env) as url:
+        async with (
+            asyncio.timeout(TIMEOUT_SECONDS),
+            httpx2.AsyncClient(headers=MCP_HEADERS) as http,
+        ):
+            opened = await http.post(url, json=INITIALIZE)
+            session = {
+                "Mcp-Session-Id": opened.headers["mcp-session-id"],
+                "MCP-Protocol-Version": "2025-11-25",
+            }
+            # Any request restarts the idle clock, so wait once and then check.
+            await asyncio.sleep(1.0)
+            ping = {"jsonrpc": "2.0", "id": 2, "method": "ping"}
+            expired = await http.post(url, json=ping, headers=session)
+
+    assert expired.status_code == 404

@@ -13,7 +13,7 @@ When enabled, this module wires up:
   (e.g. `http://otel-collector:4318/v1/traces`).
 - FastAPI auto-instrumentation, so each HTTP request gets a span.
 
-Manual spans for MCP tool calls are emitted from `observability.instrument`.
+Manual spans for MCP operations are emitted from `observability.ObservedMCPServer`.
 """
 
 from __future__ import annotations

@@ -7,7 +7,7 @@ endpoints are wrapped:
 - Forecast  (`api.open-meteo.com/v1/forecast`)         — coords → current weather.
 
 Both URLs are configurable (`MYNA_OPEN_METEO_GEOCODING_URL` /
-`MYNA_OPEN_METEO_FORECAST_URL`) so tests can drive an `httpx.MockTransport`
+`MYNA_OPEN_METEO_FORECAST_URL`) so tests can drive an `httpx2.MockTransport`
 without touching the network. The client itself is intentionally
 unopinionated about caching or retries — wrap it with `@cached`
 upstream when desired.
@@ -15,9 +15,10 @@ upstream when desired.
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 from pydantic import BaseModel
 
+from myna import __version__
 from myna.config import get_settings
 
 
@@ -85,7 +86,7 @@ class WeatherClient:
     """Async wrapper around the two Open-Meteo endpoints we use.
 
     The `transport` parameter exists so tests can pass an
-    `httpx.MockTransport`; production code uses the default network
+    `httpx2.MockTransport`; production code uses the default network
     transport.
     """
 
@@ -95,7 +96,7 @@ class WeatherClient:
         geocoding_base_url: str | None = None,
         forecast_base_url: str | None = None,
         timeout_seconds: float | None = None,
-        transport: httpx.AsyncBaseTransport | None = None,
+        transport: httpx2.AsyncBaseTransport | None = None,
     ) -> None:
         settings = get_settings()
         self.geocoding_base_url = geocoding_base_url or settings.open_meteo_geocoding_url
@@ -109,10 +110,10 @@ class WeatherClient:
         Raises `LocationNotFound` if the geocoding endpoint returns no
         results, or `WeatherFetchError` for any other upstream failure.
         """
-        async with httpx.AsyncClient(
+        async with httpx2.AsyncClient(
             transport=self._transport,
             timeout=self.timeout,
-            headers={"User-Agent": "myna/0.1 (https://github.com/juchengquan/myna)"},
+            headers={"User-Agent": f"myna/{__version__} (https://github.com/juchengquan/myna)"},
         ) as client:
             name, country, lat, lon = await self._geocode(client, location)
             temperature_c, humidity, wind_kph, weather_code, as_of = await self._forecast(
@@ -131,7 +132,7 @@ class WeatherClient:
             )
 
     async def _geocode(
-        self, client: httpx.AsyncClient, location: str
+        self, client: httpx2.AsyncClient, location: str
     ) -> tuple[str, str | None, float, float]:
         try:
             resp = await client.get(
@@ -139,7 +140,7 @@ class WeatherClient:
                 params={"name": location, "count": 1, "format": "json"},
             )
             resp.raise_for_status()
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise WeatherFetchError(f"geocoding request failed: {exc}") from exc
 
         results = (resp.json() or {}).get("results") or []
@@ -154,7 +155,7 @@ class WeatherClient:
         )
 
     async def _forecast(
-        self, client: httpx.AsyncClient, latitude: float, longitude: float
+        self, client: httpx2.AsyncClient, latitude: float, longitude: float
     ) -> tuple[float, int, float, int, str | None]:
         try:
             resp = await client.get(
@@ -169,7 +170,7 @@ class WeatherClient:
                 },
             )
             resp.raise_for_status()
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             raise WeatherFetchError(f"forecast request failed: {exc}") from exc
 
         current = (resp.json() or {}).get("current") or {}

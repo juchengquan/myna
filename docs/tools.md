@@ -59,13 +59,13 @@ That's it — the tool is now visible to MCP clients and via
 Tools can be `async def` — `MCPServer` will await them. Use this for I/O:
 
 ```python
-import httpx
+import httpx2
 
 def register(mcp: MCPServer) -> None:
     @mcp.tool()
     async def fetch_status(url: str) -> int:
         """Return the HTTP status of a GET request to `url`."""
-        async with httpx.AsyncClient() as client:
+        async with httpx2.AsyncClient() as client:
             return (await client.get(url)).status_code
 ```
 

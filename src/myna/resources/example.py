@@ -15,14 +15,16 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ResourceError, ResourceNotFoundError
 
 from myna import __version__
 from myna.config import get_settings
 from myna.tools.weather import fetch_weather
+from myna.weather_client import LocationNotFound, WeatherFetchError
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     @mcp.resource(
         "myna://server-info",
         name="server-info",
@@ -52,6 +54,11 @@ def register(mcp: FastMCP) -> None:
         ),
     )
     async def weather_resource(location: str) -> str:
-        report = await fetch_weather(location)
+        try:
+            report = await fetch_weather(location)
+        except LocationNotFound as exc:
+            raise ResourceNotFoundError(str(exc)) from exc
+        except WeatherFetchError as exc:
+            raise ResourceError(f"weather fetch failed: {exc}") from exc
         return report.model_dump_json(indent=2)
 

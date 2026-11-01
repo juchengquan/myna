@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import httpx
 import pytest
+from mcp.server.mcpserver.exceptions import ResourceError, ResourceNotFoundError
 
 from myna import __version__
 from myna.mcp_server import build_mcp
@@ -21,7 +23,7 @@ async def test_resource_template_registered() -> None:
     mcp = build_mcp()
     templates = await mcp.list_resource_templates()
     assert any(
-        t.uriTemplate == "weather://locations/{location}" for t in templates
+        t.uri_template == "weather://locations/{location}" for t in templates
     )
 
 
@@ -48,3 +50,19 @@ async def test_weather_template_resolves(mock_weather: Any) -> None:
     # upstream payload flows through unchanged.
     assert payload["country"] == "Testland"
     assert payload["temperature"] == 21.5
+
+
+@pytest.mark.asyncio
+async def test_weather_template_reports_unknown_location(mock_weather: Any) -> None:
+    mock_weather(lambda request: httpx.Response(200, json={"results": []}))
+    mcp = build_mcp()
+    with pytest.raises(ResourceNotFoundError, match="Nowhere"):
+        await mcp.read_resource("weather://locations/Nowhere")
+
+
+@pytest.mark.asyncio
+async def test_weather_template_reports_upstream_failure(mock_weather: Any) -> None:
+    mock_weather(lambda request: httpx.Response(500))
+    mcp = build_mcp()
+    with pytest.raises(ResourceError, match="weather fetch failed"):
+        await mcp.read_resource("weather://locations/Tokyo")

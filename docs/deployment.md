@@ -60,7 +60,8 @@ The image:
       based on connection count. The default stateless mode makes
       scale-out safe — no session affinity needed. If you set
       `MYNA_MCP_STATELESS=false`, configure session affinity for
-      multiple replicas.
+      multiple replicas if legacy clients connect. 2026-07-28 clients
+      never need it.
 
 ## Running directly (without Docker)
 
@@ -129,6 +130,8 @@ manage restarts.
       and traces correlate
   Resource attributes: `service.name`, `service.version`,
   `deployment.environment`.
+  The MCP SDK also records its own span for each MCP message, under the
+  `mcp-python-sdk` tracer.
 - **Health**: `GET /api/health` for liveness/readiness probes.
 
 ## Upgrading

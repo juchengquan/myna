@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from pydantic import BaseModel
 
 from myna.api.auth import require_admin
@@ -9,8 +9,8 @@ from myna.api.auth import require_admin
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-def get_mcp_from_request(request: Request) -> FastMCP:
-    mcp: FastMCP | None = getattr(request.app.state, "mcp", None)
+def get_mcp_from_request(request: Request) -> MCPServer:
+    mcp: MCPServer | None = getattr(request.app.state, "mcp", None)
     if mcp is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -61,7 +61,7 @@ class PromptsResponse(BaseModel):
     response_model=ToolsResponse,
     dependencies=[Depends(require_admin)],
 )
-async def list_tools(mcp: FastMCP = Depends(get_mcp_from_request)) -> ToolsResponse:
+async def list_tools(mcp: MCPServer = Depends(get_mcp_from_request)) -> ToolsResponse:
     tools = await mcp.list_tools()
     return ToolsResponse(
         tools=[ToolInfo(name=t.name, description=t.description) for t in tools]
@@ -74,7 +74,7 @@ async def list_tools(mcp: FastMCP = Depends(get_mcp_from_request)) -> ToolsRespo
     dependencies=[Depends(require_admin)],
 )
 async def list_resources(
-    mcp: FastMCP = Depends(get_mcp_from_request),
+    mcp: MCPServer = Depends(get_mcp_from_request),
 ) -> ResourcesResponse:
     statics = await mcp.list_resources()
     templates = await mcp.list_resource_templates()
@@ -83,17 +83,17 @@ async def list_resources(
             name=r.name or str(r.uri),
             uri=str(r.uri),
             description=r.description,
-            mime_type=r.mimeType,
+            mime_type=r.mime_type,
             is_template=False,
         )
         for r in statics
     ]
     items.extend(
         ResourceInfo(
-            name=t.name or t.uriTemplate,
-            uri=t.uriTemplate,
+            name=t.name or t.uri_template,
+            uri=t.uri_template,
             description=t.description,
-            mime_type=t.mimeType,
+            mime_type=t.mime_type,
             is_template=True,
         )
         for t in templates
@@ -107,7 +107,7 @@ async def list_resources(
     dependencies=[Depends(require_admin)],
 )
 async def list_prompts(
-    mcp: FastMCP = Depends(get_mcp_from_request),
+    mcp: MCPServer = Depends(get_mcp_from_request),
 ) -> PromptsResponse:
     prompts = await mcp.list_prompts()
     return PromptsResponse(

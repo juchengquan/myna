@@ -18,13 +18,11 @@ resources, prompts):
    auto-instrumentation) becomes the parent automatically when tracing
    is enabled.
 
-Tools are instrumented by replacing `mcp._tool_manager.call_tool`, the
-single choke point for tool execution. Resources and prompts have
-handlers that are bound on the lowlevel MCP server at FastMCP
-construction time, so monkey-patching the FastMCP method on the
-instance is too late — instead we re-register wrapped handlers on the
-lowlevel server, which overwrites the original entries in
-`_mcp_server.request_handlers`.
+`ObservedMCPServer` overrides the server's public `call_tool`,
+`read_resource`, and `get_prompt`. The protocol handlers call those same
+methods, so in-process calls and live requests are observed alike. On a
+2026-07-28 connection, a tool that asks the client a question returns and
+is called again, so it records one operation per round.
 
 The three wrappers themselves are deliberately tiny: each one calls
 into the shared `_observe(...)` async context manager that owns the
@@ -44,13 +42,12 @@ import contextlib
 import hashlib
 import json
 import time
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.tools.tool_manager import ToolManager
-from mcp.types import GetPromptResult
+from mcp.server.mcpserver import Context, MCPServer
+from mcp.shared.uri_template import UriTemplate
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
@@ -209,76 +206,45 @@ async def _observe(
             _log.info(spec.audit_event, **audit_fields)
 
 
-def instrument(mcp: FastMCP) -> None:
-    """Install metrics, audit log, and tracing for all three MCP primitives."""
-    _instrument_tools(mcp)
-    _instrument_resources(mcp)
-    _instrument_prompts(mcp)
-
-
-def _instrument_tools(mcp: FastMCP) -> None:
-    tool_manager: ToolManager = mcp._tool_manager
-    original = tool_manager.call_tool
+class ObservedMCPServer(MCPServer):
+    """MCP server that records metrics, audit logs, and spans for each operation."""
 
     async def call_tool(
-        name: str,
-        arguments: dict[str, Any],
-        context: Any = None,
-        convert_result: bool = False,
+        self, name: str, arguments: dict[str, Any], context: Context | None = None
     ) -> Any:
-        metric_target = name if tool_manager.get_tool(name) else _UNKNOWN_TARGET
+        registered = {tool.name for tool in await self.list_tools()}
+        metric_target = name if name in registered else _UNKNOWN_TARGET
         async with _observe(
             _TOOL_SPEC, name, metric_target, args_fingerprint=_fingerprint(arguments)
         ):
-            return await original(
-                name, arguments, context=context, convert_result=convert_result
-            )
+            return await super().call_tool(name, arguments, context)
 
-    tool_manager.call_tool = call_tool  # type: ignore[method-assign]
-
-
-def _instrument_resources(mcp: FastMCP) -> None:
-    # Two call paths need wrapping:
-    #   1. In-process: `mcp.read_resource(uri)` (used by tests).
-    #   2. Protocol: lowlevel `_mcp_server.request_handlers[ReadResourceRequest]`
-    #      was bound to the unwrapped `mcp.read_resource` at FastMCP
-    #      __init__ time, so monkey-patching the instance alone doesn't
-    #      reroute live requests.
-    original = mcp.read_resource
-
-    async def observed_read_resource(uri: Any) -> Iterable[Any]:
+    async def read_resource(self, uri: Any, context: Context | None = None) -> Any:
         target = str(uri)
-        async with _observe(_RESOURCE_SPEC, target, _resource_metric_target(mcp, target)):
-            return await original(uri)
+        metric_target = await self._resource_metric_target(target)
+        async with _observe(_RESOURCE_SPEC, target, metric_target):
+            return await super().read_resource(uri, context)
 
-    mcp.read_resource = observed_read_resource  # type: ignore[method-assign]
-    mcp._mcp_server.read_resource()(observed_read_resource)  # type: ignore[no-untyped-call]
-
-
-def _instrument_prompts(mcp: FastMCP) -> None:
-    original = mcp.get_prompt
-
-    async def observed_get_prompt(
-        name: str, arguments: dict[str, Any] | None = None
-    ) -> GetPromptResult:
-        metric_target = name if mcp._prompt_manager.get_prompt(name) else _UNKNOWN_TARGET
+    async def get_prompt(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        context: Context | None = None,
+    ) -> Any:
+        registered = {prompt.name for prompt in await self.list_prompts()}
+        metric_target = name if name in registered else _UNKNOWN_TARGET
         async with _observe(
             _PROMPT_SPEC, name, metric_target, args_fingerprint=_fingerprint(arguments or {})
         ):
-            return await original(name, arguments)
+            return await super().get_prompt(name, arguments, context)
 
-    mcp.get_prompt = observed_get_prompt  # type: ignore[method-assign]
-    mcp._mcp_server.get_prompt()(observed_get_prompt)  # type: ignore[no-untyped-call]
-
-
-def _resource_metric_target(mcp: FastMCP, uri: str) -> str:
-    manager = mcp._resource_manager
-    if any(str(resource.uri) == uri for resource in manager.list_resources()):
-        return uri
-    for template in manager.list_templates():
-        if template.matches(uri) is not None:
-            return template.uri_template
-    return _UNKNOWN_TARGET
+    async def _resource_metric_target(self, uri: str) -> str:
+        if any(str(resource.uri) == uri for resource in await self.list_resources()):
+            return uri
+        for template in await self.list_resource_templates():
+            if UriTemplate.parse(template.uri_template).match(uri) is not None:
+                return template.uri_template
+        return _UNKNOWN_TARGET
 
 
 def _fingerprint(arguments: dict[str, Any]) -> str:

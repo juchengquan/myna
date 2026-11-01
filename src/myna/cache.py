@@ -100,7 +100,7 @@ def cached(
     """Decorator: cache an MCP tool's return value for `ttl_seconds`.
 
     Order matters when stacked with `@mcp.tool()` — `@cached` goes on
-    the inside, `@mcp.tool()` on the outside, so FastMCP still sees the
+    the inside, `@mcp.tool()` on the outside, so MCPServer still sees the
     original function's signature (`functools.wraps` carries it
     through via `__wrapped__`).
 

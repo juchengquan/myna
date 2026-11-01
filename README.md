@@ -6,7 +6,7 @@ mounted as a sub-app to speak the MCP wire protocol.
 
 - FastAPI owns the process — lifespan, routing, OpenAPI, the admin API,
   and any HTTP routes you add.
-- `FastMCP` is mounted at `/mcp` and is responsible only for the MCP
+- `MCPServer` is mounted at `/mcp` and is responsible only for the MCP
   protocol (Streamable HTTP, JSON-RPC, sessions, tool schemas).
 - Tools are plain Python functions in [`src/myna/tools/`](src/myna/tools/).
 
@@ -51,14 +51,14 @@ All config is via environment variables (see `.env.example`), loaded by `pydanti
 Prefix: `MYNA_`.
 
 The server runs in stateless HTTP mode by default, so replicas need no
-session affinity. Progress notifications and the `summarize_via_sampling`
-and `confirm_action` tools need `MYNA_MCP_STATELESS=false`; see
+session affinity. The `summarize_via_sampling` and `confirm_action` tools
+need `MYNA_MCP_STATELESS=false`; see
 [`docs/architecture.md`](docs/architecture.md#stateless-and-stateful-mode).
 
 ## Adding tools
 
 Register MCP tools in `src/myna/tools/`. Each module exposes a `register(mcp)` function
-that adds tools/resources/prompts to the shared `FastMCP` instance. See `tools/example.py`.
+that adds tools/resources/prompts to the shared `MCPServer` instance. See `tools/example.py`.
 
 ## Layout
 
@@ -67,7 +67,7 @@ src/myna/
   main.py            # FastAPI app, mounts MCP + admin API
   config.py          # pydantic-settings config
   logging_config.py  # structlog setup
-  mcp_server.py      # FastMCP instance + tool registration
+  mcp_server.py      # MCPServer instance + tool registration
   middleware.py      # auth + rate limiting on /mcp
   rate_limit.py      # token bucket
   cache.py           # @cached TTL decorator
@@ -114,6 +114,6 @@ uv run python scripts/smoke_test.py
 uv run python scripts/smoke_test.py --url http://localhost:8000/mcp/
 ```
 
-It initializes a session and exercises the tools, resources, and prompts.
-Against a stateful server it also checks progress notifications and both
-interactive tools, and fails if one doesn't finish within 15 seconds.
+It connects as a legacy client and as a 2026-07-28 client, and exercises
+the tools, resources, and prompts. It checks progress notifications. Against a stateful server it also checks
+both interactive tools, and fails if one doesn't finish within 15 seconds.

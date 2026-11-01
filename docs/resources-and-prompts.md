@@ -21,9 +21,9 @@ Each module exposes a `register(mcp)` function and is wired up from
 
 ```python
 # src/myna/resources/example.py
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     @mcp.resource(
         "myna://server-info",
         name="server-info",
@@ -79,10 +79,10 @@ the same `register(mcp)` pattern.
 
 ```python
 # src/myna/prompts/example.py
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.prompts.base import Message, UserMessage
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.prompts.base import Message, UserMessage
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     @mcp.prompt(
         name="summarize",
         description="Ask the model to summarize text in N sentences.",
@@ -115,7 +115,7 @@ for msg in result.messages:
 
 > Prompt arguments arrive as strings over the wire (per the MCP spec),
 > so even integer-typed parameters should be passed as strings on the
-> client. FastMCP coerces them on the server side.
+> client. MCPServer coerces them on the server side.
 
 ## Observability note
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ToolError
 
 from myna.mcp_server import build_mcp
 

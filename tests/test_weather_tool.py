@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
 from myna.mcp_server import build_mcp
 
@@ -17,7 +19,7 @@ async def test_get_weather_registered() -> None:
 @pytest.mark.asyncio
 async def test_get_weather_returns_expected_payload(mock_weather: Any) -> None:
     mcp = build_mcp()
-    _, body = await mcp.call_tool("get_weather", {"location": "Tokyo"})
+    body = (await mcp.call_tool("get_weather", {"location": "Tokyo"})).structured_content
     assert body["location"] == "Tokyo"
     assert body["unit"] == "celsius"
     assert body["country"] == "Testland"
@@ -30,8 +32,9 @@ async def test_get_weather_returns_expected_payload(mock_weather: Any) -> None:
 @pytest.mark.asyncio
 async def test_get_weather_respects_unit(mock_weather: Any) -> None:
     mcp = build_mcp()
-    _, c = await mcp.call_tool("get_weather", {"location": "Paris", "unit": "celsius"})
-    _, f = await mcp.call_tool("get_weather", {"location": "Paris", "unit": "fahrenheit"})
+    args = {"location": "Paris"}
+    c = (await mcp.call_tool("get_weather", {**args, "unit": "celsius"})).structured_content
+    f = (await mcp.call_tool("get_weather", {**args, "unit": "fahrenheit"})).structured_content
     assert c["unit"] == "celsius"
     assert f["unit"] == "fahrenheit"
     assert f["temperature"] == pytest.approx(c["temperature"] * 9 / 5 + 32, abs=0.1)
@@ -42,3 +45,19 @@ async def test_get_weather_rejects_empty_location(mock_weather: Any) -> None:
     mcp = build_mcp()
     with pytest.raises(Exception, match="location must not be empty"):
         await mcp.call_tool("get_weather", {"location": "   "})
+
+
+@pytest.mark.asyncio
+async def test_get_weather_reports_unknown_location(mock_weather: Any) -> None:
+    mock_weather(lambda request: httpx.Response(200, json={"results": []}))
+    mcp = build_mcp()
+    with pytest.raises(ToolError, match="Nowhere"):
+        await mcp.call_tool("get_weather", {"location": "Nowhere"})
+
+
+@pytest.mark.asyncio
+async def test_get_weather_reports_upstream_failure(mock_weather: Any) -> None:
+    mock_weather(lambda request: httpx.Response(500))
+    mcp = build_mcp()
+    with pytest.raises(ToolError, match="weather fetch failed"):
+        await mcp.call_tool("get_weather", {"location": "Tokyo"})

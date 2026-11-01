@@ -10,11 +10,11 @@ Each module exposes a `register(mcp)` function and is wired up from
 
 from __future__ import annotations
 
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.prompts.base import Message, UserMessage
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.prompts.base import Message, UserMessage
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     @mcp.prompt(
         name="summarize",
         description="Ask the model to summarize a block of text in N sentences.",

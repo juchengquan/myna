@@ -37,9 +37,10 @@ Then:
 
 - **Jaeger** — open http://localhost:16686, pick `myna` from the
   service dropdown, click *Find Traces*. Each `/mcp` POST shows up as
-  one HTTP span (FastAPI auto-instrumentation) with the
+  one HTTP span (FastAPI auto-instrumentation) with the MCP SDK's span
+  for the message nested under it, such as `tools/call ping`. Myna's
   `mcp.tool.call <name>`, `mcp.resource.read <uri>`, or
-  `mcp.prompt.get <name>` span nested under it.
+  `mcp.prompt.get <name>` span is nested under that.
 - **Prometheus** — open http://localhost:9090, try queries like:
   - `myna_tool_calls_total` — counts by tool/caller/status
   - `rate(myna_tool_call_duration_seconds_sum[1m])` — avg latency

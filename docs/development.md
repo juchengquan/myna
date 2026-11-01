@@ -93,6 +93,9 @@ Always commit `uv.lock` together with the `pyproject.toml` change.
 
 The job matrix covers Python 3.11 and 3.12.
 
+A `docker` job builds the image, starts it with production settings, and
+checks `/api/health` and an authenticated `/mcp` request.
+
 A separate `audit` job runs `pip-audit` against the locked runtime
 dependencies, on every push and PR and weekly, because advisories appear
 without code changes. Dependabot opens weekly update PRs for Python

@@ -45,6 +45,17 @@ Then:
 - Admin API:    `http://localhost:8000/api/health`
 - OpenAPI docs: `http://localhost:8000/docs`
 
+Outside local development, set these or the endpoints reject requests:
+
+| Setting | Without it |
+| --- | --- |
+| `MYNA_MCP_ALLOWED_HOSTS` | `/mcp` returns `421` for any hostname except localhost |
+| `MYNA_MCP_API_KEYS` | `/mcp` returns `401` in staging and production |
+| `MYNA_METRICS_API_KEY` | `/metrics` returns `500` in staging and production |
+| `MYNA_ADMIN_API_KEY` | `/api/admin/*` returns `500` in staging and production |
+
+See [`docs/deployment.md`](docs/deployment.md) for the full checklist.
+
 ## Configuration
 
 All config is via environment variables (see `.env.example`), loaded by `pydantic-settings`.

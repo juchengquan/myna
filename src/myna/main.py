@@ -16,6 +16,7 @@ from myna.middleware import MCPAuthMiddleware, MountPathMiddleware, RateLimitMid
 from myna.observability import render_metrics
 from myna.rate_limit import RateLimiter
 from myna.tracing import setup_tracing
+from myna.verifiers import StaticKeyVerifier
 
 
 def create_app() -> FastAPI:
@@ -78,8 +79,8 @@ def create_app() -> FastAPI:
     app.add_middleware(
         MCPAuthMiddleware,
         prefix=settings.mcp_mount_path,
-        api_keys=settings.mcp_api_keys,
-        allow_anonymous=settings.env == "development",
+        verifier=StaticKeyVerifier(settings.mcp_api_keys),
+        allow_anonymous=settings.env == "development" and not settings.mcp_api_keys,
         failure_limiter=rate_limiter,
     )
 

@@ -11,6 +11,6 @@ from myna.main import create_app
 @pytest.fixture()
 def client() -> Iterator[TestClient]:
     app = create_app()
-    # The MCP endpoint rejects TestClient's default `testserver` host.
-    with TestClient(app, base_url="http://localhost") as c:
+    # The MCP endpoint only accepts local hosts that include a port.
+    with TestClient(app, base_url="http://localhost:8000") as c:
         yield c

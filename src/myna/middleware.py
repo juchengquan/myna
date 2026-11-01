@@ -23,10 +23,10 @@ reach the rate limit middleware, so the auth middleware limits them itself.
 from __future__ import annotations
 
 import json
-import secrets
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from mcp.server.auth.provider import TokenVerifier
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from myna.context import ANONYMOUS, current_caller
@@ -58,13 +58,13 @@ class MCPAuthMiddleware:
         app: ASGIApp,
         *,
         prefix: str,
-        api_keys: dict[str, str],
+        verifier: TokenVerifier,
         allow_anonymous: bool,
         failure_limiter: RateLimiter,
     ) -> None:
         self._app = app
         self._prefix = prefix.rstrip("/") or "/"
-        self._api_keys = dict(api_keys)
+        self._verifier = verifier
         self._allow_anonymous = allow_anonymous
         self._failure_limiter = failure_limiter
 
@@ -73,7 +73,7 @@ class MCPAuthMiddleware:
             await self._app(scope, receive, send)
             return
 
-        caller = self._authenticate(scope)
+        caller = await self._authenticate(scope)
         if caller is None:
             # Only failures spend these tokens, so a valid key still works
             # from an address that is being throttled.
@@ -99,23 +99,17 @@ class MCPAuthMiddleware:
         finally:
             current_caller.reset(token)
 
-    def _authenticate(self, scope: Scope) -> str | None:
+    async def _authenticate(self, scope: Scope) -> str | None:
         header = _get_header(scope, b"authorization")
         if not header:
-            return ANONYMOUS if self._allow_anonymous and not self._api_keys else None
+            return ANONYMOUS if self._allow_anonymous else None
 
         scheme, _, token = header.partition(" ")
         if scheme.lower() != "bearer" or not token:
             return None
 
-        # Check every key in constant time, so timing reveals nothing about
-        # how close a guess was.
-        presented = token.encode()
-        caller = None
-        for key, label in self._api_keys.items():
-            if secrets.compare_digest(key.encode(), presented):
-                caller = label
-        return caller
+        access_token = await self._verifier.verify_token(token)
+        return access_token.client_id if access_token else None
 
 
 class RateLimitMiddleware:

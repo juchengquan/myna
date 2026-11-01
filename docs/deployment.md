@@ -13,7 +13,7 @@ docker run --rm -p 8000:8000 \
   -e MYNA_ENV=production \
   -e MYNA_ADMIN_API_KEY=$(openssl rand -hex 32) \
   -e MYNA_METRICS_API_KEY=$(openssl rand -hex 32) \
-  -e MYNA_MCP_API_KEYS="{\"$(openssl rand -hex 32)\":\"client-a\"}" \
+  -e MYNA_MCP_API_KEYS="client-a:$(openssl rand -hex 32)" \
   -e MYNA_MCP_ALLOWED_HOSTS='["myna.example.com"]' \
   myna:latest
 ```
@@ -39,9 +39,9 @@ remote deployment to be the first real test of those.
       `openssl rand -hex 32`). Without it, admin endpoints return `500`.
 - [ ] Set `MYNA_METRICS_API_KEY` the same way and give it to your
       Prometheus scrape config. Without it, `/metrics` returns `500`.
-- [ ] Set `MYNA_MCP_API_KEYS` to a JSON object mapping at least one
-      bearer token to a caller label. Without it, all `/mcp` traffic
-      is rejected with `401`.
+- [ ] Set `MYNA_MCP_API_KEYS` to at least one `name:key` entry (see
+      [MCP keys](#mcp-keys)). Without it, all `/mcp` traffic is rejected
+      with `401`.
 - [ ] Set `MYNA_MCP_ALLOWED_HOSTS` to the hostnames clients use, such as
       `'["myna.example.com"]'`. Without it, all `/mcp` traffic through a
       non-localhost name is rejected with `421`. Behind a reverse proxy,
@@ -69,6 +69,32 @@ remote deployment to be the first real test of those.
       `MYNA_MCP_STATELESS=false`, configure session affinity for
       multiple replicas if legacy clients connect. 2026-07-28 clients
       never need it.
+
+## MCP keys
+
+Generate a key for each client:
+
+```bash
+echo "client-a:$(openssl rand -hex 32)"
+```
+
+That prints a ready-to-use entry. Join entries with commas in
+`MYNA_MCP_API_KEYS`, and keep the value in your secrets manager.
+
+To rotate a key without downtime, list the old and new keys under the same
+name, restart, move the client to the new key, then remove the old one and
+restart again:
+
+```bash
+MYNA_MCP_API_KEYS=client-a:old-key,client-a:new-key
+```
+
+Both keys share one caller name and one rate limit. Myna reads keys once at
+startup, so each change needs a restart.
+
+These keys suit machine clients and local development. Auth goes through the
+SDK's `TokenVerifier` interface (see `src/myna/verifiers.py`), so another way of
+issuing tokens is a new verifier, not a change to the auth middleware.
 
 ## Running directly (without Docker)
 

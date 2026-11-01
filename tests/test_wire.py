@@ -38,7 +38,7 @@ def _live_server(
     monkeypatch: pytest.MonkeyPatch,
     *,
     stateless: bool,
-    api_keys: str = "{}",
+    api_keys: str = "",
     env: dict[str, str] | None = None,
 ) -> Iterator[str]:
     for name, value in (env or {}).items():
@@ -222,7 +222,7 @@ async def test_caller_reaches_metrics_on_both_protocol_eras(
     labels = {"tool": "ping", "caller": "wire-client", "status": "ok"}
     before = metric_value(TOOL_CALLS, **labels)
 
-    api_keys = '{"sk-wire":"wire-client"}'
+    api_keys = "wire-client:sk-wire"
     with _live_server(monkeypatch, stateless=stateless, api_keys=api_keys) as url:
         async with _session(url, headers=token) as session:
             await session.call_tool("ping", {})

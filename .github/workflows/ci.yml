@@ -54,7 +54,7 @@ jobs:
             -e MYNA_ENV=production \
             -e MYNA_ADMIN_API_KEY=ci-admin \
             -e MYNA_METRICS_API_KEY=ci-metrics \
-            -e MYNA_MCP_API_KEYS='{"ci-key":"ci"}' \
+            -e MYNA_MCP_API_KEYS=ci:ci-key \
             -e MYNA_MCP_ALLOWED_HOSTS='["myna.test"]' \
             myna:ci
 

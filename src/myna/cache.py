@@ -4,8 +4,8 @@
 calls within the TTL window return the cached value instead of
 re-running the body. Use it for **idempotent** tools — `get_weather`,
 external HTTP fetches, expensive pure computations. Do **not** use it
-for tools that take a `Context` parameter (sampling, elicitation,
-streaming), tools with intentional side effects, or anything where
+for tools that take a `Context` parameter or ask the client a question,
+tools with intentional side effects, or anything where
 each call is meant to do work.
 
 Each cached tool gets its own `TTLCache` instance — keys are scoped

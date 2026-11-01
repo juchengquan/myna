@@ -66,9 +66,9 @@ uv run python scripts/smoke_test.py --url http://localhost:8000/mcp/
 
 The script connects as a legacy client and as a 2026-07-28 client, and
 exercises the tools, resources, and prompts. It exits non-zero if anything expected is
-missing, or if progress notifications don't arrive. Against a server with
-`MYNA_MCP_STATELESS=false`, it also fails if `summarize_via_sampling` or
-`confirm_action` errors or doesn't finish within 15 seconds.
+missing, if progress notifications don't arrive, or if `confirm_action`
+errors or doesn't finish within 15 seconds. The one exception is a legacy
+client on a stateless server, where a protocol error is expected.
 
 ## Adding / updating dependencies
 

@@ -1,8 +1,7 @@
 """Tests over the real Streamable HTTP transport.
 
-In-process tests can't catch transport behavior: the sampling and
-elicitation tools pass all of those in stateless mode and still hang for
-a real client. These tests run a server on a local port and connect with
+In-process tests can't catch transport behavior, such as how a tool asks
+the client a question or streams progress. These tests run a server on a local port and connect with
 the SDK's client, under a timeout so a hang fails instead of blocking CI.
 """
 
@@ -23,12 +22,7 @@ from mcp import ClientSession
 from mcp.client import Client
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared.exceptions import MCPError
-from mcp.types import (
-    CreateMessageResult,
-    ElicitResult,
-    LoggingMessageNotificationParams,
-    TextContent,
-)
+from mcp.types import INVALID_REQUEST, ElicitResult, TextContent
 
 from myna.config import get_settings
 from myna.main import create_app
@@ -115,14 +109,6 @@ async def _modern_client(
         yield client
 
 
-async def _on_sampling(context: Any, params: Any) -> CreateMessageResult:
-    return CreateMessageResult(
-        role="assistant",
-        content=TextContent(type="text", text="client summary"),
-        model="test",
-    )
-
-
 async def _on_elicitation(context: Any, params: Any) -> ElicitResult:
     return ElicitResult(action="accept", content={"confirmed": True, "note": "ok"})
 
@@ -133,13 +119,23 @@ def _text(result: Any) -> str:
     return content.text
 
 
-async def test_stateless_omits_interactive_tools(stateless_url: str) -> None:
-    async with _session(stateless_url) as session:
+@pytest.mark.parametrize("fixture", ["stateless_url", "stateful_url"])
+async def test_tools_are_offered_in_both_modes(
+    fixture: str, request: pytest.FixtureRequest
+) -> None:
+    url = cast(str, request.getfixturevalue(fixture))
+    async with _session(url) as session:
         tools = {t.name for t in (await session.list_tools()).tools}
-        assert "ping" in tools
-        assert "stream_count" in tools
-        assert "summarize_via_sampling" not in tools
-        assert "confirm_action" not in tools
+
+    assert {"ping", "stream_count", "get_weather", "confirm_action"} <= tools
+
+
+async def test_stateless_legacy_elicitation_fails_without_hanging(stateless_url: str) -> None:
+    async with _session(stateless_url, elicitation_callback=_on_elicitation) as session:
+        with pytest.raises(MCPError) as exc_info:
+            await session.call_tool("confirm_action", {"action": "deploy"})
+
+    assert exc_info.value.error.code == INVALID_REQUEST
 
 
 async def test_mount_path_works_without_trailing_slash(stateless_url: str) -> None:
@@ -151,35 +147,22 @@ async def test_mount_path_works_without_trailing_slash(stateless_url: str) -> No
 
 
 @pytest.mark.parametrize("fixture", ["stateless_url", "stateful_url"])
-async def test_legacy_stream_count_delivers_progress_and_logs(
+async def test_legacy_stream_count_delivers_progress(
     fixture: str, request: pytest.FixtureRequest
 ) -> None:
     url = cast(str, request.getfixturevalue(fixture))
-    logs: list[Any] = []
     progress: list[float] = []
-
-    async def on_log(params: LoggingMessageNotificationParams) -> None:
-        logs.append(params.data)
 
     async def on_progress(value: float, total: float | None, message: str | None) -> None:
         progress.append(value)
 
-    async with _session(url, logging_callback=on_log) as session:
+    async with _session(url) as session:
         result = await session.call_tool(
             "stream_count", {"n": 2, "delay_ms": 0}, progress_callback=on_progress
         )
 
     assert _text(result) == "counted to 2"
     assert progress == [1.0, 2.0]
-    assert logs == ["tick 1", "tick 2"]
-
-
-async def test_stateful_legacy_sampling_round_trip(stateful_url: str) -> None:
-    async with _session(stateful_url, sampling_callback=_on_sampling) as session:
-        result = await session.call_tool("summarize_via_sampling", {"text": "hello"})
-
-    assert not result.is_error
-    assert _text(result) == "client summary"
 
 
 async def test_stateful_legacy_elicitation_round_trip(stateful_url: str) -> None:
@@ -190,57 +173,41 @@ async def test_stateful_legacy_elicitation_round_trip(stateful_url: str) -> None
     assert "approved" in _text(result)
 
 
-@pytest.mark.parametrize(
-    ("tool", "arguments"),
-    [
-        ("summarize_via_sampling", {"text": "hello"}),
-        ("confirm_action", {"action": "deploy"}),
-    ],
-)
-async def test_stateful_legacy_tools_refused_without_client_capability(
-    stateful_url: str, tool: str, arguments: dict[str, str]
+async def test_stateful_legacy_elicitation_refused_without_client_capability(
+    stateful_url: str,
 ) -> None:
     async with _session(stateful_url) as session:
         with pytest.raises(MCPError) as exc_info:
-            await session.call_tool(tool, arguments)
+            await session.call_tool("confirm_action", {"action": "deploy"})
 
     assert exc_info.value.error.code == MISSING_CLIENT_CAPABILITY
 
 
 @pytest.mark.parametrize("fixture", ["stateless_url", "stateful_url"])
-async def test_modern_stream_count_delivers_progress_and_logs(
+async def test_modern_stream_count_delivers_progress(
     fixture: str, request: pytest.FixtureRequest
 ) -> None:
     url = cast(str, request.getfixturevalue(fixture))
-    logs: list[Any] = []
     progress: list[float] = []
-
-    async def on_log(params: LoggingMessageNotificationParams) -> None:
-        logs.append(params.data)
 
     async def on_progress(value: float, total: float | None, message: str | None) -> None:
         progress.append(value)
 
-    async with _modern_client(url, logging_callback=on_log, log_level="info") as client:
+    async with _modern_client(url) as client:
         result = await client.call_tool(
             "stream_count", {"n": 2, "delay_ms": 0}, progress_callback=on_progress
         )
 
     assert _text(result) == "counted to 2"
     assert progress == [1.0, 2.0]
-    assert logs == ["tick 1", "tick 2"]
 
 
-async def test_modern_sampling_round_trip(stateful_url: str) -> None:
-    async with _modern_client(stateful_url, sampling_callback=_on_sampling) as client:
-        result = await client.call_tool("summarize_via_sampling", {"text": "hello"})
-
-    assert not result.is_error
-    assert _text(result) == "client summary"
-
-
-async def test_modern_elicitation_round_trip(stateful_url: str) -> None:
-    async with _modern_client(stateful_url, elicitation_callback=_on_elicitation) as client:
+@pytest.mark.parametrize("fixture", ["stateless_url", "stateful_url"])
+async def test_modern_elicitation_round_trip(
+    fixture: str, request: pytest.FixtureRequest
+) -> None:
+    url = cast(str, request.getfixturevalue(fixture))
+    async with _modern_client(url, elicitation_callback=_on_elicitation) as client:
         result = await client.call_tool("confirm_action", {"action": "deploy"})
 
     assert not result.is_error

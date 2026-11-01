@@ -80,6 +80,24 @@ console.log(result);
 await client.close();
 ```
 
+## Claude Code
+
+```bash
+claude mcp add --transport http myna http://localhost:8000/mcp/ \
+  --header "Authorization: Bearer sk-abc"
+```
+
+Tested with Claude Code 2.1.316 against a local server:
+
+- It connects with protocol 2026-07-28 and has no session, in either server
+  mode. Metrics and audit lines show the caller from the bearer token.
+- `ping`, `get_weather`, and `stream_count` work.
+- `confirm_action` reaches the client. In `claude -p` nobody can answer, so
+  it comes back as cancelled.
+
+A person answering a `confirm_action` prompt and Claude Desktop haven't been
+tested.
+
 ## Notes
 
 - The MCP endpoint expects `POST` with
@@ -89,8 +107,8 @@ await client.close();
   `initialize` handshake. It runs in stateless mode by default, so legacy
   clients should not assume a long-lived session and should re-initialize
   on reconnect.
-- The sampling and elicitation tools need a server running with
-  `MYNA_MCP_STATELESS=false`.
+- `confirm_action` needs a client that supports elicitation. A legacy client
+  also needs a server running with `MYNA_MCP_STATELESS=false`.
 - Request bodies over 4 MiB get `413`.
 - A `421 Invalid Host header` response means the hostname in the URL isn't
   in `MYNA_MCP_ALLOWED_HOSTS`. A `403 Invalid Origin header` response means

@@ -9,19 +9,15 @@ from myna.config import get_settings
 from myna.observability import ObservedMCPServer
 
 
-def build_mcp(*, stateless: bool | None = None) -> MCPServer:
+def build_mcp() -> MCPServer:
     """Create a new MCPServer instance with all tools registered.
 
     A fresh instance is required per app lifecycle: the session manager's
     run() can only be invoked once per instance.
-
-    `stateless` defaults to the `MYNA_MCP_STATELESS` setting.
     """
     settings = get_settings()
-    if stateless is None:
-        stateless = settings.mcp_stateless
     mcp = ObservedMCPServer(settings.mcp_server_name, version=__version__)
-    _register_tools(mcp, stateless=stateless)
+    _register_tools(mcp)
     _register_resources(mcp)
     _register_prompts(mcp)
     return mcp
@@ -43,18 +39,13 @@ def build_mcp_app(mcp: MCPServer) -> Starlette:
     )
 
 
-def _register_tools(mcp: MCPServer, *, stateless: bool) -> None:
-    from myna.tools import elicitation, example, sampling, streaming, weather
+def _register_tools(mcp: MCPServer) -> None:
+    from myna.tools import elicitation, example, streaming, weather
 
     example.register(mcp)
     streaming.register(mcp)
     weather.register(mcp)
-
-    # These tools ask the client a question. A legacy client in stateless
-    # mode has no channel to receive it, so they are stateful only.
-    if not stateless:
-        elicitation.register(mcp)
-        sampling.register(mcp)
+    elicitation.register(mcp)
 
 
 def _register_resources(mcp: MCPServer) -> None:

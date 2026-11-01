@@ -26,8 +26,10 @@ COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
+# /data is for an optional SQLite file. Named volumes take this directory's owner.
 RUN useradd --create-home --uid 1000 myna \
-    && chown -R myna:myna /app /opt/venv
+    && mkdir /data \
+    && chown -R myna:myna /app /opt/venv /data
 USER myna
 
 EXPOSE 8000

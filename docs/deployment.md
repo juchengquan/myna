@@ -107,11 +107,22 @@ export MYNA_KEY_ADMIN_API_KEY=$(openssl rand -hex 32)
 uv run myna-migrate   # run this before starting, and after each upgrade
 ```
 
-With Docker, run `myna-migrate` as the container's command. The server won't start
-if migrations are behind, but it does start if the database is unreachable.
+The server won't start if migrations are behind, but it does start if the database
+is unreachable.
 
-Use PostgreSQL if you run more than one instance. SQLite suits a single instance,
-and in a container its file needs a volume or the keys are lost with the container.
+Use PostgreSQL if you run more than one instance. SQLite suits a single instance. In
+a container, keep its file on a volume mounted at `/data`, or the keys are lost with
+the container:
+
+```bash
+export DB=sqlite:////data/myna.db   # four slashes: an absolute path
+docker run --rm -v myna-data:/data -e MYNA_DATABASE_URL=$DB myna:latest myna-migrate
+docker run -p 8000:8000 -v myna-data:/data -e MYNA_DATABASE_URL=$DB \
+  -e MYNA_KEY_ADMIN_API_KEY=$MYNA_KEY_ADMIN_API_KEY myna:latest
+```
+
+The image runs as user `1000`. A named volume needs no setup. For a bind mount on
+Linux, make the host directory writable first: `sudo chown 1000:1000 ./data`.
 
 Create a key. It's only shown in this response, and only a hash is stored:
 

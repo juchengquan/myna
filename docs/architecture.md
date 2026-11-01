@@ -61,8 +61,10 @@ is the SDK's responsibility (MCP wire protocol).
 
 - The MCP app is mounted at `MYNA_MCP_MOUNT_PATH` (default `/mcp`). Its
   internal Streamable HTTP path is set to `/`, so the endpoint is `/mcp/`.
-  A request to `/mcp` gets a `307` redirect to `/mcp/`, so configure
-  clients with the trailing slash.
+  `MountPathMiddleware` serves `/mcp` the same way, without a redirect.
+- The MCP endpoint only accepts the hosts in `MYNA_MCP_ALLOWED_HOSTS`, which
+  defaults to localhost. This protects local servers from DNS rebinding, so
+  remote deployments must add their hostname or every request gets a `421`.
 - The FastMCP `session_manager` is started/stopped by FastAPI's
   `lifespan` context manager — see `src/myna/main.py`.
 - A fresh `FastMCP` instance is built per app (`build_mcp()` in

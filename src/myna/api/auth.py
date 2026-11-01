@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import secrets
+
 from fastapi import Depends, Header, HTTPException, status
 
 from myna.config import Settings, get_settings
@@ -21,7 +23,9 @@ def _check_bearer(
         return
 
     expected = f"Bearer {key}"
-    if authorization != expected:
+    if authorization is None or not secrets.compare_digest(
+        authorization.encode(), expected.encode()
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing credentials",

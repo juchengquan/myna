@@ -88,8 +88,9 @@ Currently exposes:
 - `myna_prompt_gets_total{name, caller, status}` — counter of MCP prompt fetches.
 - `myna_prompt_get_duration_seconds{name}` — latency histogram per prompt name.
 - `myna_rate_limit_hits_total{key_kind}` — counter of MCP requests rejected
-  by the rate limiter. `key_kind` is `caller` for authenticated requests or
-  `ip` for anonymous ones.
+  by the rate limiter. `key_kind` is `caller` for authenticated requests,
+  `ip` for anonymous ones, or `auth_failure` for repeated failed
+  authentication attempts from one address.
 
 ### `HTTP 429` on `/mcp`
 
@@ -106,6 +107,10 @@ Content-Type: application/json
 
 `Retry-After` is the conservative integer-second hint (per RFC 7231);
 `retry_after` in the JSON body is the precise float estimate.
+
+Failed authentication attempts get the same response once an address
+exceeds its own quota, and a `401` until then. A valid token still works
+from a throttled address.
 
 The `caller` label resolves from `MYNA_MCP_API_KEYS` (see
 [configuration.md](configuration.md)); requests in anonymous-mode dev

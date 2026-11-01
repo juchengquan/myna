@@ -78,6 +78,33 @@ jobs:
           echo "POST /mcp/ returned $status"
           test "$status" = 200
 
+  postgres:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: myna_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Run key store tests on PostgreSQL
+        env:
+          MYNA_TEST_POSTGRES_URL: postgresql://postgres:ci-only@localhost:5432/myna_test
+        run: uv run pytest tests/keys
+
   template:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest

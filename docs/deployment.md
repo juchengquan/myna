@@ -96,6 +96,48 @@ These keys suit machine clients and local development. Auth goes through the
 SDK's `TokenVerifier` interface (see `src/myna/verifiers.py`), so another way of
 issuing tokens is a new verifier, not a change to the auth middleware.
 
+## Database keys
+
+To add and revoke clients without a restart, store keys in a database and manage
+them over HTTP. This is optional, and off unless `MYNA_DATABASE_URL` is set.
+
+```bash
+export MYNA_DATABASE_URL=postgresql://user:pass@host/db
+export MYNA_KEY_ADMIN_API_KEY=$(openssl rand -hex 32)
+uv run myna-migrate   # run this before starting, and after each upgrade
+```
+
+With Docker, run `myna-migrate` as the container's command. The server won't start
+if migrations are behind, but it does start if the database is unreachable.
+
+Use PostgreSQL if you run more than one instance. SQLite suits a single instance,
+and in a container its file needs a volume or the keys are lost with the container.
+
+Create a key. It's only shown in this response, and only a hash is stored:
+
+```bash
+curl -X POST http://localhost:8000/api/admin/keys \
+  -H "Authorization: Bearer $MYNA_KEY_ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "client-a", "expires_in_days": 90}'
+```
+
+See [api.md](api.md#database-keys) for listing and revoking.
+
+How it behaves:
+
+- Env keys are checked first, then the database. Env keys keep working during a
+  database outage, while database keys get `503`.
+- Revoking takes effect on the next request, on every instance.
+- Keys expire after 90 days by default. Nothing warns you first, so check
+  `expires_at` and `last_used_at` in the list.
+- Every key can use every tool, and each key's name is its caller name. Reusing a
+  name lets a client hold two keys during rotation.
+- `MYNA_KEY_ADMIN_API_KEY` can create keys that reach every tool, so treat it as
+  more sensitive than the admin key, and restrict the route at your proxy.
+- Rate limits are still per process, so with several instances the total allowed
+  is higher.
+
 ## Running directly (without Docker)
 
 ```bash

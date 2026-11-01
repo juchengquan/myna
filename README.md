@@ -57,7 +57,8 @@ Outside local development, set these or the endpoints reject requests:
 | `MYNA_METRICS_API_KEY` | `/metrics` returns `500` in staging and production |
 | `MYNA_ADMIN_API_KEY` | `/api/admin/*` returns `500` in staging and production |
 
-See [`docs/deployment.md`](docs/deployment.md) for the full checklist.
+See [`docs/deployment.md`](docs/deployment.md) for the full checklist, and for
+optional database keys that you can add and revoke without a restart.
 
 ## Start a new server
 
@@ -129,6 +130,8 @@ src/myna/
   tools/             # MCP tool modules
   resources/         # MCP resource modules
   prompts/           # MCP prompt modules
+  verifiers.py       # turns a bearer token into the caller
+  keys/              # optional database keys, managed over HTTP
   weather/           # example integration: client, tool, resource, prompt
 tests/               # pytest suite
 ```

@@ -58,6 +58,24 @@ curl -H "Authorization: Bearer $MYNA_ADMIN_API_KEY" \
 }
 ```
 
+### Database keys
+
+These routes exist only when `MYNA_DATABASE_URL` and `MYNA_KEY_ADMIN_API_KEY` are
+both set. They need `MYNA_KEY_ADMIN_API_KEY` as a bearer token in every
+environment, and repeated failures from one address get `429`. See
+[deployment.md](deployment.md#database-keys).
+
+- `POST /api/admin/keys` creates a key from `name` and optional `expires_in_days`
+  (`1` to `3650`, default `90`, `null` for no expiry). It returns `201` with the
+  `key`, which isn't shown again, or `409` at `MYNA_MAX_ACTIVE_KEYS`.
+- `GET /api/admin/keys` lists every key's `id`, `name`, `status` (`active`,
+  `expired`, or `revoked`), `created_at`, `expires_at`, `last_used_at`, and
+  `revoked_at`.
+- `DELETE /api/admin/keys/{id}` revokes a key and returns `204`, or `404` if it's
+  unknown. Revoking one twice is harmless.
+
+These routes return `503` while the database is unreachable.
+
 ### `GET /metrics`
 
 Prometheus exposition endpoint. Authentication follows the admin rules

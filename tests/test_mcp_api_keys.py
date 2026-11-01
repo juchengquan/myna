@@ -43,7 +43,7 @@ def test_name_may_repeat_for_rotation() -> None:
         (f"client-a:{SECRET},", "entry 2 is missing the colon"),
         (f"client a:{SECRET}", "entry 1 has a name"),
         (f":{SECRET}", "entry 1 has a name"),
-        (f"anonymous:{SECRET}", "entry 1 uses the reserved name"),
+        (f"anonymous:{SECRET}", "entry 1 has a name that uses the reserved name"),
         ("client-a:", "entry 1 has an empty key"),
         (f"client-a:{SECRET} x", "entry 1 has an empty key, or a key containing spaces"),
         (f"client-a:{SECRET},client-b:{SECRET}", "entry 2 repeats a key"),

@@ -103,6 +103,10 @@ rather than downloading a different Python.
 A `docker` job builds the image, starts it with production settings, and
 checks `/api/health` and an authenticated `/mcp` request.
 
+A `postgres` job runs the key store tests in `tests/keys` against PostgreSQL,
+which the other test jobs skip. Run them locally by setting
+`MYNA_TEST_POSTGRES_URL`.
+
 A `template` job runs the commands in the README's "Start a new server"
 section as written, then checks that the result passes the tests, ruff, and
 mypy.

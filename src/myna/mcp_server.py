@@ -6,34 +6,42 @@ from myna.config import get_settings
 from myna.observability import instrument
 
 
-def build_mcp() -> FastMCP:
+def build_mcp(*, stateless: bool | None = None) -> FastMCP:
     """Create a new FastMCP instance with all tools registered.
 
     A fresh instance is required per app lifecycle: FastMCP's
     StreamableHTTPSessionManager.run() can only be invoked once
     per instance.
+
+    `stateless` defaults to the `MYNA_MCP_STATELESS` setting.
     """
     settings = get_settings()
+    if stateless is None:
+        stateless = settings.mcp_stateless
     mcp = FastMCP(
         name=settings.mcp_server_name,
-        stateless_http=True,
+        stateless_http=stateless,
         streamable_http_path="/",
     )
     instrument(mcp)
-    _register_tools(mcp)
+    _register_tools(mcp, stateless=stateless)
     _register_resources(mcp)
     _register_prompts(mcp)
     return mcp
 
 
-def _register_tools(mcp: FastMCP) -> None:
+def _register_tools(mcp: FastMCP, *, stateless: bool) -> None:
     from myna.tools import elicitation, example, sampling, streaming, weather
 
-    elicitation.register(mcp)
     example.register(mcp)
-    sampling.register(mcp)
     streaming.register(mcp)
     weather.register(mcp)
+
+    # These tools wait on a reply from the client. In stateless mode the
+    # request or its reply never gets routed, so the tool call would hang.
+    if not stateless:
+        elicitation.register(mcp)
+        sampling.register(mcp)
 
 
 def _register_resources(mcp: FastMCP) -> None:

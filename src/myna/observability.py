@@ -31,6 +31,11 @@ into the shared `_observe(...)` async context manager that owns the
 span / metrics / audit-log lifecycle. Adding a new MCP primitive in
 future means adding a new `_OpSpec` and a thin wrapper, not a fresh
 copy of the timing-and-recording boilerplate.
+
+Clients choose the names and URIs they send, so metric labels are limited
+to what is registered: a resource template rather than the URI that
+matched it, and `unknown` for anything unregistered. Spans and audit lines
+keep the raw value.
 """
 
 from __future__ import annotations
@@ -100,6 +105,8 @@ TOOL_CACHE = Counter(
     labelnames=("tool", "outcome"),
 )
 
+_UNKNOWN_TARGET = "unknown"
+
 _log = get_logger("myna.audit")
 
 
@@ -152,7 +159,7 @@ _PROMPT_SPEC = _OpSpec(
 
 @contextlib.asynccontextmanager
 async def _observe(
-    spec: _OpSpec, target: str, *, args_fingerprint: str | None = None
+    spec: _OpSpec, target: str, metric_target: str, *, args_fingerprint: str | None = None
 ) -> AsyncIterator[None]:
     """Open a span, time the body, and record metrics + audit log on exit.
 
@@ -184,9 +191,9 @@ async def _observe(
         finally:
             duration = time.monotonic() - start
             duration_ms = round(duration * 1000, 2)
-            spec.duration.labels(**{spec.target_label: target}).observe(duration)
+            spec.duration.labels(**{spec.target_label: metric_target}).observe(duration)
             spec.counter.labels(
-                **{spec.target_label: target, "caller": caller, "status": status}
+                **{spec.target_label: metric_target, "caller": caller, "status": status}
             ).inc()
             span.set_attribute("mcp.status", status)
             span.set_attribute("mcp.duration_ms", duration_ms)
@@ -219,7 +226,10 @@ def _instrument_tools(mcp: FastMCP) -> None:
         context: Any = None,
         convert_result: bool = False,
     ) -> Any:
-        async with _observe(_TOOL_SPEC, name, args_fingerprint=_fingerprint(arguments)):
+        metric_target = name if tool_manager.get_tool(name) else _UNKNOWN_TARGET
+        async with _observe(
+            _TOOL_SPEC, name, metric_target, args_fingerprint=_fingerprint(arguments)
+        ):
             return await original(
                 name, arguments, context=context, convert_result=convert_result
             )
@@ -237,7 +247,8 @@ def _instrument_resources(mcp: FastMCP) -> None:
     original = mcp.read_resource
 
     async def observed_read_resource(uri: Any) -> Iterable[Any]:
-        async with _observe(_RESOURCE_SPEC, str(uri)):
+        target = str(uri)
+        async with _observe(_RESOURCE_SPEC, target, _resource_metric_target(mcp, target)):
             return await original(uri)
 
     mcp.read_resource = observed_read_resource  # type: ignore[method-assign]
@@ -250,13 +261,24 @@ def _instrument_prompts(mcp: FastMCP) -> None:
     async def observed_get_prompt(
         name: str, arguments: dict[str, Any] | None = None
     ) -> GetPromptResult:
+        metric_target = name if mcp._prompt_manager.get_prompt(name) else _UNKNOWN_TARGET
         async with _observe(
-            _PROMPT_SPEC, name, args_fingerprint=_fingerprint(arguments or {})
+            _PROMPT_SPEC, name, metric_target, args_fingerprint=_fingerprint(arguments or {})
         ):
             return await original(name, arguments)
 
     mcp.get_prompt = observed_get_prompt  # type: ignore[method-assign]
     mcp._mcp_server.get_prompt()(observed_get_prompt)  # type: ignore[no-untyped-call]
+
+
+def _resource_metric_target(mcp: FastMCP, uri: str) -> str:
+    manager = mcp._resource_manager
+    if any(str(resource.uri) == uri for resource in manager.list_resources()):
+        return uri
+    for template in manager.list_templates():
+        if template.matches(uri) is not None:
+            return template.uri_template
+    return _UNKNOWN_TARGET
 
 
 def _fingerprint(arguments: dict[str, Any]) -> str:

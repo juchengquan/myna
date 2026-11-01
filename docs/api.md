@@ -53,16 +53,30 @@ curl -H "Authorization: Bearer $MYNA_ADMIN_API_KEY" \
   "tools": [
     { "name": "ping",        "description": "Health check tool — returns 'pong'." },
     { "name": "echo",        "description": "Echo back the provided message." },
-    { "name": "get_weather", "description": "Return a (fake, deterministic) current-weather report for a location." }
+    { "name": "get_weather", "description": "Return the current weather for a location, via Open-Meteo." }
   ]
 }
 ```
 
 ### `GET /metrics`
 
-Prometheus exposition endpoint. Public (no auth) — designed to be scraped
-by a Prometheus server inside your network. Place it behind a firewall or
-a path-based ACL on your reverse proxy if your perimeter requires it.
+Prometheus exposition endpoint. Authentication follows the admin rules
+above, using `MYNA_METRICS_API_KEY`: open in development if the key is
+unset, `500` in `staging`/`production` if it is unset, and otherwise
+`401` without the right bearer token. Point Prometheus at it with:
+
+```yaml
+scrape_configs:
+  - job_name: myna
+    authorization:
+      credentials: <MYNA_METRICS_API_KEY>
+```
+
+The `tool`, `uri`, and `name` labels only use registered values, so
+clients can't create new series by sending arbitrary input. A templated
+resource is labelled by its template, such as
+`weather://locations/{location}`, and anything unregistered is labelled
+`unknown`. Audit log lines and spans keep the raw value.
 
 Currently exposes:
 
@@ -70,7 +84,7 @@ Currently exposes:
 - `myna_tool_call_duration_seconds{tool}` — latency histogram per tool.
 - `myna_tool_cache_total{tool, outcome}` — tool result-cache outcomes; `outcome` is `hit` or `miss`. Only emitted for tools decorated with `@cached`.
 - `myna_resource_reads_total{uri, caller, status}` — counter of MCP resource reads.
-- `myna_resource_read_duration_seconds{uri}` — latency histogram per resource URI.
+- `myna_resource_read_duration_seconds{uri}` — latency histogram per resource URI or template.
 - `myna_prompt_gets_total{name, caller, status}` — counter of MCP prompt fetches.
 - `myna_prompt_get_duration_seconds{name}` — latency histogram per prompt name.
 - `myna_rate_limit_hits_total{key_kind}` — counter of MCP requests rejected

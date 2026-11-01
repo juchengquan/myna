@@ -119,9 +119,8 @@ for msg in result.messages:
 
 ## Observability note
 
-`/metrics` and the audit log currently cover **tool calls only**.
-`resources/read` and `prompts/get` are not yet instrumented — separate
-follow-up.
+`/metrics`, the audit log, and traces cover resources and prompts the
+same way as tools. See [deployment.md](deployment.md#observability).
 
 ## Admin REST endpoints
 

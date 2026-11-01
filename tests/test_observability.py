@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from fastapi.testclient import TestClient
 from mcp.server.fastmcp.exceptions import ToolError
@@ -14,6 +16,7 @@ from myna.observability import (
     TOOL_DURATION,
     histogram_count,
     metric_value,
+    render_metrics,
 )
 
 
@@ -85,3 +88,47 @@ async def test_prompt_get_increments_metrics() -> None:
     after = metric_value(PROMPT_GETS, name="summarize", caller="anonymous", status="ok")
     assert after == before + 1
     assert histogram_count(PROMPT_DURATION, name="summarize") == before_hist + 1
+
+
+@pytest.mark.asyncio
+async def test_templated_resource_is_labelled_by_template(mock_weather: Any) -> None:
+    mcp = build_mcp()
+    template = "weather://locations/{location}"
+    before = metric_value(RESOURCE_READS, uri=template, caller="anonymous", status="ok")
+
+    list(await mcp.read_resource("weather://locations/Tokyo"))
+    list(await mcp.read_resource("weather://locations/Berlin"))
+
+    assert metric_value(RESOURCE_READS, uri=template, caller="anonymous", status="ok") == before + 2
+    assert 'uri="weather://locations/Tokyo"' not in render_metrics()[0].decode()
+
+
+@pytest.mark.asyncio
+async def test_unregistered_targets_are_labelled_unknown() -> None:
+    mcp = build_mcp()
+    before_tool = metric_value(TOOL_CALLS, tool="unknown", caller="anonymous", status="error")
+    before_uri = metric_value(RESOURCE_READS, uri="unknown", caller="anonymous", status="error")
+    before_prompt = metric_value(PROMPT_GETS, name="unknown", caller="anonymous", status="error")
+
+    with pytest.raises(ToolError):
+        await mcp.call_tool("no-such-tool", {})
+    with pytest.raises(ValueError):
+        await mcp.read_resource("myna://no-such-resource")
+    with pytest.raises(ValueError):
+        await mcp.get_prompt("no-such-prompt")
+
+    assert (
+        metric_value(TOOL_CALLS, tool="unknown", caller="anonymous", status="error")
+        == before_tool + 1
+    )
+    assert (
+        metric_value(RESOURCE_READS, uri="unknown", caller="anonymous", status="error")
+        == before_uri + 1
+    )
+    assert (
+        metric_value(PROMPT_GETS, name="unknown", caller="anonymous", status="error")
+        == before_prompt + 1
+    )
+    payload = render_metrics()[0].decode()
+    for name in ("no-such-tool", "no-such-resource", "no-such-prompt"):
+        assert name not in payload

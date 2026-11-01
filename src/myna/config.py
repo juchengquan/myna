@@ -22,8 +22,24 @@ class Settings(BaseSettings):
 
     mcp_server_name: str = "myna"
     mcp_mount_path: str = "/mcp"
+    mcp_stateless: bool = Field(
+        default=True,
+        description=(
+            "Run the MCP endpoint in stateless HTTP mode, so replicas need no "
+            "session affinity. Server-to-client requests can't complete in this "
+            "mode, so sampling and elicitation tools are only registered when "
+            "this is false, and progress notifications don't reach clients."
+        ),
+    )
 
     admin_api_key: str | None = Field(default=None, description="Bearer token for admin API")
+    metrics_api_key: str | None = Field(
+        default=None,
+        description=(
+            "Bearer token for `/metrics`. In development, unset means open "
+            "access; in staging/production, unset makes `/metrics` return 500."
+        ),
+    )
 
     mcp_api_keys: dict[str, str] = Field(
         default_factory=dict,

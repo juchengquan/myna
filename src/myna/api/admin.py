@@ -1,33 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel
 
-from myna.config import Settings, get_settings
+from myna.api.auth import require_admin
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-
-async def require_admin(
-    settings: Settings = Depends(get_settings),
-    authorization: str | None = Header(default=None),
-) -> None:
-    if settings.admin_api_key is None:
-        if settings.env != "development":
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="admin_api_key not configured",
-            )
-        return
-
-    expected = f"Bearer {settings.admin_api_key}"
-    if authorization != expected:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing admin credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
 
 
 def get_mcp_from_request(request: Request) -> FastMCP:

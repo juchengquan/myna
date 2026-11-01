@@ -36,6 +36,53 @@ def test_ttlcache_rejects_non_positive_ttl() -> None:
         TTLCache(ttl_seconds=-1)
 
 
+def test_ttlcache_rejects_non_positive_max_entries() -> None:
+    with pytest.raises(ValueError):
+        TTLCache(ttl_seconds=10, max_entries=0)
+
+
+@pytest.mark.asyncio
+async def test_ttlcache_evicts_oldest_when_full() -> None:
+    c = TTLCache(ttl_seconds=60, max_entries=2)
+
+    await c.store("a", 1)
+    await c.store("b", 2)
+    await c.store("c", 3)
+
+    assert len(c) == 2
+    assert await c.lookup("a") == (False, None)
+    assert await c.lookup("b") == (True, 2)
+    assert await c.lookup("c") == (True, 3)
+
+
+@pytest.mark.asyncio
+async def test_ttlcache_restore_refreshes_eviction_order() -> None:
+    c = TTLCache(ttl_seconds=60, max_entries=2)
+
+    await c.store("a", 1)
+    await c.store("b", 2)
+    await c.store("a", 10)
+    await c.store("c", 3)
+
+    assert await c.lookup("a") == (True, 10)
+    assert await c.lookup("b") == (False, None)
+
+
+@pytest.mark.asyncio
+async def test_ttlcache_store_drops_expired_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    c = TTLCache(ttl_seconds=10)
+
+    fake_now = [0.0]
+    monkeypatch.setattr(c, "_clock", lambda: fake_now[0])
+
+    await c.store("a", 1)
+    await c.store("b", 2)
+    fake_now[0] = 11.0
+    await c.store("c", 3)
+
+    assert len(c) == 1
+
+
 @pytest.mark.asyncio
 async def test_cached_decorator_returns_same_value_on_repeat() -> None:
     calls = {"n": 0}

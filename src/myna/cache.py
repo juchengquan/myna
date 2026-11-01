@@ -17,9 +17,9 @@ Limitations:
 - In-process only; not shared across uvicorn workers or replicas.
   For shared caching, swap the in-memory dict for Redis via the same
   decorator interface.
-- No size cap. Fine for small key spaces (e.g. a finite set of
-  locations); add an LRU bound if user-controllable inputs explode
-  the keyspace.
+- Each cache holds at most `max_entries` entries. When full, the oldest
+  entry is evicted early, so a very large keyspace lowers the hit rate
+  but can't grow memory without bound.
 - Caches the *return value*, not intermediate state — for tools that
   raise, the exception is not cached.
 """
@@ -39,14 +39,19 @@ from opentelemetry import trace
 
 F = TypeVar("F", bound=Callable[..., Any])
 
+DEFAULT_MAX_ENTRIES = 1024
+
 
 class TTLCache:
     """Async-safe TTL cache keyed by a string. One instance per cached tool."""
 
-    def __init__(self, ttl_seconds: float) -> None:
+    def __init__(self, ttl_seconds: float, max_entries: int = DEFAULT_MAX_ENTRIES) -> None:
         if ttl_seconds <= 0:
             raise ValueError("ttl_seconds must be positive")
+        if max_entries < 1:
+            raise ValueError("max_entries must be positive")
         self.ttl = ttl_seconds
+        self.max_entries = max_entries
         self._store: dict[str, tuple[float, Any]] = {}
         self._lock = asyncio.Lock()
         self._clock = time.monotonic
@@ -65,8 +70,17 @@ class TTLCache:
             return True, value
 
     async def store(self, key: str, value: Any) -> None:
+        now = self._clock()
         async with self._lock:
-            self._store[key] = (self._clock() + self.ttl, value)
+            # Re-insert so dict order matches expiry order: every entry has
+            # the same TTL, so the oldest entry is always first to expire.
+            self._store.pop(key, None)
+            self._store[key] = (now + self.ttl, value)
+            while True:
+                oldest = next(iter(self._store))
+                if len(self._store) <= self.max_entries and self._store[oldest][0] > now:
+                    break
+                del self._store[oldest]
 
     async def clear(self) -> None:
         """Drop all entries. Mostly a test hook."""
@@ -81,6 +95,7 @@ def cached(
     ttl_seconds: float,
     *,
     label: str | None = None,
+    max_entries: int = DEFAULT_MAX_ENTRIES,
 ) -> Callable[[F], F]:
     """Decorator: cache an MCP tool's return value for `ttl_seconds`.
 
@@ -100,7 +115,7 @@ def cached(
     def decorator(fn: F) -> F:
         from myna.observability import TOOL_CACHE  # avoid circular import
 
-        cache = TTLCache(ttl_seconds)
+        cache = TTLCache(ttl_seconds, max_entries=max_entries)
         is_async = inspect.iscoroutinefunction(fn)
         tool_name = label or fn.__name__
 

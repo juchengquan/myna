@@ -96,9 +96,13 @@ The decorator:
   span so you can colour-code traces by cache state.
 - Works for both sync and async tool bodies.
 
-`get_weather` already uses this — call it twice with the same
-`(location, unit)` within 60s and you'll see one miss followed by
-hits, both in `/metrics` and in the trace.
+Each cache holds at most `max_entries` entries (default 1024) and evicts
+the oldest entry when full.
+
+`get_weather` uses this on its internal `_fetch_celsius(location)` helper,
+which is shared with the weather resource and labelled
+`weather_open_meteo`. Call it twice for the same location within 60s, in
+either unit, and you'll see one miss followed by a hit.
 
 **When NOT to cache:**
 
@@ -119,6 +123,10 @@ taking a `Context` parameter. The SDK forwards `ctx.report_progress`
 and `ctx.info` / `ctx.warning` / `ctx.error` calls as MCP notifications
 over the Streamable HTTP transport — clients see them live, before the
 final return value.
+
+**Mode caveat:** log events reach clients in both modes, but progress
+notifications only reach them with `MYNA_MCP_STATELESS=false`. In the
+default stateless mode they are dropped without an error.
 
 ```python
 from typing import Any
@@ -142,7 +150,7 @@ to print the streamed events.
 > Tools that declare a `Context` parameter cannot be called in-process
 > via `mcp.call_tool(...)` without an active MCP session. For unit
 > tests, verify registration and input validation only; cover the
-> streaming path through the wire-level smoke test.
+> streaming path in `tests/test_wire.py`, which uses the real transport.
 
 ## Sampling — asking the client's LLM
 
@@ -175,6 +183,10 @@ def register(mcp: FastMCP) -> None:
 
 See [`tools/sampling.py`](../src/myna/tools/sampling.py) for the full
 worked example (`summarize_via_sampling`).
+
+**Mode requirement:** sampling needs `MYNA_MCP_STATELESS=false`. In
+stateless mode the call hangs, so register tools like this one only in
+stateful mode, as `mcp_server._register_tools` does.
 
 **Compatibility caveat:** sampling only works with clients that
 advertise the `sampling` capability in their `initialize` handshake.
@@ -223,6 +235,9 @@ The result has three possible `action` values:
 See [`tools/elicitation.py`](../src/myna/tools/elicitation.py) for the
 runnable example (`confirm_action`).
 
+**Mode requirement:** same as sampling — elicitation needs
+`MYNA_MCP_STATELESS=false`.
+
 **Compatibility caveat:** same as sampling — the client must advertise
 the `elicitation` capability. Modern clients support it; the example
 tool surfaces a clear error rather than hanging on a request the
@@ -253,5 +268,6 @@ async def test_my_tool() -> None:
     assert result["result"].startswith("Hi Ada")
 ```
 
-For wire-level verification, use the smoke script described in
+For wire-level coverage, add a case to `tests/test_wire.py`. To check a
+running server, use the smoke script described in
 [development.md](development.md#end-to-end-smoke-test).

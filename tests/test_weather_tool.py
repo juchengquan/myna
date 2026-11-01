@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
@@ -49,7 +49,7 @@ async def test_get_weather_rejects_empty_location(mock_weather: Any) -> None:
 
 @pytest.mark.asyncio
 async def test_get_weather_reports_unknown_location(mock_weather: Any) -> None:
-    mock_weather(lambda request: httpx.Response(200, json={"results": []}))
+    mock_weather(lambda request: httpx2.Response(200, json={"results": []}))
     mcp = build_mcp()
     with pytest.raises(ToolError, match="Nowhere"):
         await mcp.call_tool("get_weather", {"location": "Nowhere"})
@@ -57,7 +57,7 @@ async def test_get_weather_reports_unknown_location(mock_weather: Any) -> None:
 
 @pytest.mark.asyncio
 async def test_get_weather_reports_upstream_failure(mock_weather: Any) -> None:
-    mock_weather(lambda request: httpx.Response(500))
+    mock_weather(lambda request: httpx2.Response(500))
     mcp = build_mcp()
     with pytest.raises(ToolError, match="weather fetch failed"):
         await mcp.call_tool("get_weather", {"location": "Tokyo"})

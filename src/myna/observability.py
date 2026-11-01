@@ -21,8 +21,9 @@ resources, prompts):
 `ObservedMCPServer` overrides the server's public `call_tool`,
 `read_resource`, and `get_prompt`. The protocol handlers call those same
 methods, so in-process calls and live requests are observed alike. On a
-2026-07-28 connection, a tool that asks the client a question returns and
-is called again, so it records one operation per round.
+2026-07-28 connection, a tool that asks the client a question returns the
+question and is called again with the answer. The first round records the
+status `input_required`, so `ok` still counts completed calls.
 
 The three wrappers themselves are deliberately tiny: each one calls
 into the shared `_observe(...)` async context manager that owns the
@@ -48,6 +49,7 @@ from typing import Any
 
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.shared.uri_template import UriTemplate
+from mcp.types import InputRequiredResult
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
@@ -103,6 +105,7 @@ TOOL_CACHE = Counter(
 )
 
 _UNKNOWN_TARGET = "unknown"
+_STATUS_INPUT_REQUIRED = "input_required"
 
 _log = get_logger("myna.audit")
 
@@ -154,10 +157,22 @@ _PROMPT_SPEC = _OpSpec(
 )
 
 
+@dataclass
+class _Outcome:
+    """Lets the body of `_observe` report a status other than ok or error."""
+
+    status: str = "ok"
+
+    def note(self, result: Any) -> Any:
+        if isinstance(result, InputRequiredResult):
+            self.status = _STATUS_INPUT_REQUIRED
+        return result
+
+
 @contextlib.asynccontextmanager
 async def _observe(
     spec: _OpSpec, target: str, metric_target: str, *, args_fingerprint: str | None = None
-) -> AsyncIterator[None]:
+) -> AsyncIterator[_Outcome]:
     """Open a span, time the body, and record metrics + audit log on exit.
 
     Used by the three primitive wrappers below. Callers `return` the
@@ -177,15 +192,16 @@ async def _observe(
         attributes=span_attrs,
     ) as span:
         start = time.monotonic()
-        status = "ok"
+        outcome = _Outcome()
         try:
-            yield
+            yield outcome
         except Exception as exc:
-            status = "error"
+            outcome.status = "error"
             span.record_exception(exc)
             span.set_status(Status(StatusCode.ERROR, str(exc)))
             raise
         finally:
+            status = outcome.status
             duration = time.monotonic() - start
             duration_ms = round(duration * 1000, 2)
             spec.duration.labels(**{spec.target_label: metric_target}).observe(duration)
@@ -216,14 +232,14 @@ class ObservedMCPServer(MCPServer):
         metric_target = name if name in registered else _UNKNOWN_TARGET
         async with _observe(
             _TOOL_SPEC, name, metric_target, args_fingerprint=_fingerprint(arguments)
-        ):
-            return await super().call_tool(name, arguments, context)
+        ) as outcome:
+            return outcome.note(await super().call_tool(name, arguments, context))
 
     async def read_resource(self, uri: Any, context: Context | None = None) -> Any:
         target = str(uri)
         metric_target = await self._resource_metric_target(target)
-        async with _observe(_RESOURCE_SPEC, target, metric_target):
-            return await super().read_resource(uri, context)
+        async with _observe(_RESOURCE_SPEC, target, metric_target) as outcome:
+            return outcome.note(await super().read_resource(uri, context))
 
     async def get_prompt(
         self,
@@ -235,8 +251,8 @@ class ObservedMCPServer(MCPServer):
         metric_target = name if name in registered else _UNKNOWN_TARGET
         async with _observe(
             _PROMPT_SPEC, name, metric_target, args_fingerprint=_fingerprint(arguments or {})
-        ):
-            return await super().get_prompt(name, arguments, context)
+        ) as outcome:
+            return outcome.note(await super().get_prompt(name, arguments, context))
 
     async def _resource_metric_target(self, uri: str) -> str:
         if any(str(resource.uri) == uri for resource in await self.list_resources()):

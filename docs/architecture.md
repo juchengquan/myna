@@ -151,7 +151,7 @@ register those tools in stateless mode. Those tools use resolvers, so the
 SDK picks how to ask for each connection: a request mid-call for a legacy
 client, or a question in the tool result for a 2026-07-28 client.
 
-In stateful mode, the SDK closes a legacy session after 30 idle minutes and
-refuses new ones past 10,000 per process, with `503`. Either limit applies
-per process. `tests/test_wire.py` covers both modes and both eras over the
+In stateful mode, a legacy session closes after 30 idle minutes, and new
+ones are refused past 10,000 per process, with `503`. Change these with
+`MYNA_MCP_SESSION_IDLE_TIMEOUT_SECONDS` and `MYNA_MCP_MAX_SESSIONS`. `tests/test_wire.py` covers both modes and both eras over the
 real transport.

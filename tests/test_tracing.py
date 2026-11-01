@@ -4,13 +4,19 @@ import json
 import logging
 
 import pytest
+from fastapi.testclient import TestClient
 from mcp.server.mcpserver.exceptions import ToolError
 from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from myna.config import Settings
 from myna.logging_config import configure_logging, inject_trace_context
+from myna.main import create_app
 from myna.mcp_server import build_mcp
-from myna.tracing import install_test_exporter
+from myna.tracing import install_test_exporter, setup_tracing
 
 
 @pytest.fixture()
@@ -109,3 +115,67 @@ async def test_audit_log_includes_trace_id(
     assert last["event"] == "tool_call"
     assert "trace_id" in last
     assert "span_id" in last
+
+
+def test_setup_tracing_disabled_installs_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    installed: list[object] = []
+    monkeypatch.setattr(trace, "set_tracer_provider", installed.append)
+
+    assert setup_tracing(Settings(otel_enabled=False)) is None
+    assert installed == []
+
+
+def test_setup_tracing_sets_resource_attributes(monkeypatch: pytest.MonkeyPatch) -> None:
+    installed: list[object] = []
+    monkeypatch.setattr(trace, "set_tracer_provider", installed.append)
+
+    settings = Settings(env="staging", otel_enabled=True, otel_service_name="myna-test")
+    provider = setup_tracing(settings)
+
+    assert provider is not None
+    assert installed == [provider]
+    attributes = provider.resource.attributes
+    assert attributes["service.name"] == "myna-test"
+    assert attributes["deployment.environment"] == "staging"
+    provider.shutdown()
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "exporter_type"),
+    [(None, ConsoleSpanExporter), ("http://collector:4318/v1/traces", OTLPSpanExporter)],
+)
+def test_setup_tracing_picks_exporter_from_endpoint(
+    monkeypatch: pytest.MonkeyPatch, endpoint: str | None, exporter_type: type
+) -> None:
+    exporters: list[object] = []
+
+    def recording_processor(exporter: object) -> SimpleSpanProcessor:
+        exporters.append(exporter)
+        return SimpleSpanProcessor(InMemorySpanExporter())
+
+    monkeypatch.setattr(trace, "set_tracer_provider", lambda provider: None)
+    monkeypatch.setattr("myna.tracing.BatchSpanProcessor", recording_processor)
+    monkeypatch.setattr("myna.tracing.SimpleSpanProcessor", recording_processor)
+
+    settings = Settings(otel_enabled=True, otel_exporter_endpoint=endpoint)
+    provider = setup_tracing(settings)
+
+    assert provider is not None
+    assert [type(exporter) for exporter in exporters] == [exporter_type]
+    provider.shutdown()
+
+
+def test_http_requests_are_traced_except_noisy_routes(monkeypatch: pytest.MonkeyPatch) -> None:
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr("myna.main.setup_tracing", lambda settings: provider)
+
+    with TestClient(create_app()) as client:
+        client.get("/api/health")
+        client.get("/metrics")
+        client.get("/api/admin/tools")
+
+    names = {span.name for span in exporter.get_finished_spans()}
+    assert "GET /api/admin/tools" in names
+    assert not any("/api/health" in name or "/metrics" in name for name in names)

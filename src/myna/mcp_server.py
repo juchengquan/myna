@@ -33,6 +33,8 @@ def build_mcp_app(mcp: MCPServer) -> Starlette:
     return mcp.streamable_http_app(
         streamable_http_path="/",
         stateless_http=settings.mcp_stateless,
+        session_idle_timeout=settings.mcp_session_idle_timeout_seconds or None,
+        max_sessions=settings.mcp_max_sessions or None,
         transport_security=TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
             allowed_hosts=settings.mcp_allowed_hosts,

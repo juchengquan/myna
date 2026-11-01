@@ -87,6 +87,11 @@ Currently exposes:
 - `myna_resource_read_duration_seconds{uri}` — latency histogram per resource URI or template.
 - `myna_prompt_gets_total{name, caller, status}` — counter of MCP prompt fetches.
 - `myna_prompt_get_duration_seconds{name}` — latency histogram per prompt name.
+
+`status` is `ok`, `error`, or `input_required`. On a 2026-07-28 connection, a
+tool that asks the client a question records `input_required` for that round,
+then `ok` or `error` when it's called again with the answer.
+
 - `myna_rate_limit_hits_total{key_kind}` — counter of MCP requests rejected
   by the rate limiter. `key_kind` is `caller` for authenticated requests,
   `ip` for anonymous ones, or `auth_failure` for repeated failed

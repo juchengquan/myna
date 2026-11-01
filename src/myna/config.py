@@ -26,9 +26,25 @@ class Settings(BaseSettings):
         default=True,
         description=(
             "Run the MCP endpoint in stateless HTTP mode, so replicas need no "
-            "session affinity. Server-to-client requests can't complete in this "
-            "mode, so sampling and elicitation tools are only registered when "
-            "this is false, and progress notifications don't reach clients."
+            "session affinity. Legacy clients can't receive server-to-client "
+            "requests in this mode, so sampling and elicitation tools are only "
+            "registered when this is false."
+        ),
+    )
+    mcp_session_idle_timeout_seconds: float = Field(
+        default=1800,
+        ge=0,
+        description=(
+            "Close a stateful session after this long with nothing in flight. "
+            "Set to 0 to never expire sessions. Has no effect in stateless mode."
+        ),
+    )
+    mcp_max_sessions: int = Field(
+        default=10_000,
+        ge=0,
+        description=(
+            "Refuse new stateful sessions past this many per process, with a "
+            "503. Set to 0 for no limit. Has no effect in stateless mode."
         ),
     )
 

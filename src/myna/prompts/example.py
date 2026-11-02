@@ -4,8 +4,8 @@ Prompts are reusable templated message sequences a client (typically an
 LLM-driven agent) can fetch and use. The simplest form returns a single
 string, which the SDK wraps as a `user` message.
 
-Each module exposes a `register(mcp)` function and is wired up from
-`mcp_server._register_prompts()`.
+Each module exposes a `register(mcp)` function and is listed in
+`mcp_server.REGISTRATIONS`.
 """
 
 from __future__ import annotations

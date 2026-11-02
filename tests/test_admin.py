@@ -8,7 +8,7 @@ def test_list_tools_in_dev_without_auth(client: TestClient) -> None:
     assert resp.status_code == 200
     body = resp.json()
     names = {t["name"] for t in body["tools"]}
-    assert {"ping", "echo"}.issubset(names)
+    assert "probe_ping" in names
 
 
 def test_list_resources(client: TestClient) -> None:
@@ -16,8 +16,8 @@ def test_list_resources(client: TestClient) -> None:
     assert resp.status_code == 200
     body = resp.json()
     by_name = {r["name"]: r for r in body["resources"]}
-    assert "server-info" in by_name
-    assert by_name["server-info"]["is_template"] is False
+    assert "probe-info" in by_name
+    assert by_name["probe-info"]["is_template"] is False
 
 
 def test_list_prompts(client: TestClient) -> None:
@@ -25,6 +25,6 @@ def test_list_prompts(client: TestClient) -> None:
     assert resp.status_code == 200
     body = resp.json()
     by_name = {p["name"]: p for p in body["prompts"]}
-    assert "summarize" in by_name
-    arg_names = {a["name"] for a in by_name["summarize"]["arguments"]}
+    assert "probe_prompt" in by_name
+    arg_names = {a["name"] for a in by_name["probe_prompt"]["arguments"]}
     assert "text" in arg_names

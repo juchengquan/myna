@@ -122,7 +122,8 @@ docker run -p 8000:8000 -v myna-data:/data -e MYNA_DATABASE_URL=$DB \
 ```
 
 The image runs as user `1000`. A named volume needs no setup. For a bind mount on
-Linux, make the host directory writable first: `sudo chown 1000:1000 ./data`.
+Linux, make the host directory writable first: `sudo chown 1000:1000 ./data`. If you
+don't, `myna-migrate` stops and says which folder it can't write to.
 
 Create a key. It's only shown in this response, and only a hash is stored:
 

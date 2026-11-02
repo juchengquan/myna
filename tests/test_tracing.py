@@ -17,6 +17,7 @@ from myna.logging_config import configure_logging, inject_trace_context
 from myna.main import create_app
 from myna.mcp_server import build_mcp
 from myna.tracing import install_test_exporter, setup_tracing
+from tests.probes import INFO_URI
 
 
 @pytest.fixture()
@@ -29,12 +30,12 @@ def exporter() -> InMemorySpanExporter:
 @pytest.mark.asyncio
 async def test_tool_call_emits_span(exporter: InMemorySpanExporter) -> None:
     mcp = build_mcp()
-    await mcp.call_tool("ping", {})
+    await mcp.call_tool("probe_ping", {})
 
     tool_spans = [s for s in exporter.get_finished_spans() if s.name.startswith("mcp.tool.call")]
     assert tool_spans
     attrs = dict(tool_spans[-1].attributes or {})
-    assert attrs["mcp.tool.name"] == "ping"
+    assert attrs["mcp.tool.name"] == "probe_ping"
     assert attrs["mcp.status"] == "ok"
     assert attrs["mcp.caller"] == "anonymous"
     assert isinstance(attrs["mcp.duration_ms"], float)
@@ -44,9 +45,9 @@ async def test_tool_call_emits_span(exporter: InMemorySpanExporter) -> None:
 async def test_failing_tool_call_marks_span_error(exporter: InMemorySpanExporter) -> None:
     mcp = build_mcp()
     with pytest.raises(ToolError):
-        await mcp.call_tool("stream_count", {"n": 0, "delay_ms": 0})
+        await mcp.call_tool("probe_fail", {})
 
-    failing = [s for s in exporter.get_finished_spans() if "stream_count" in s.name]
+    failing = [s for s in exporter.get_finished_spans() if "probe_fail" in s.name]
     assert failing
     span = failing[-1]
     assert dict(span.attributes or {}).get("mcp.status") == "error"
@@ -56,24 +57,24 @@ async def test_failing_tool_call_marks_span_error(exporter: InMemorySpanExporter
 @pytest.mark.asyncio
 async def test_resource_read_emits_span(exporter: InMemorySpanExporter) -> None:
     mcp = build_mcp()
-    list(await mcp.read_resource("myna://server-info"))
+    list(await mcp.read_resource(INFO_URI))
 
     spans = [s for s in exporter.get_finished_spans() if s.name.startswith("mcp.resource.read")]
     assert spans
     attrs = dict(spans[-1].attributes or {})
-    assert attrs["mcp.resource.uri"] == "myna://server-info"
+    assert attrs["mcp.resource.uri"] == INFO_URI
     assert attrs["mcp.status"] == "ok"
 
 
 @pytest.mark.asyncio
 async def test_prompt_get_emits_span(exporter: InMemorySpanExporter) -> None:
     mcp = build_mcp()
-    await mcp.get_prompt("summarize", {"text": "hi", "sentences": "1"})
+    await mcp.get_prompt("probe_prompt", {"text": "hi"})
 
     spans = [s for s in exporter.get_finished_spans() if s.name.startswith("mcp.prompt.get")]
     assert spans
     attrs = dict(spans[-1].attributes or {})
-    assert attrs["mcp.prompt.name"] == "summarize"
+    assert attrs["mcp.prompt.name"] == "probe_prompt"
     assert attrs["mcp.status"] == "ok"
 
 
@@ -103,7 +104,7 @@ async def test_audit_log_includes_trace_id(
     caplog.set_level(logging.INFO, logger="myna.audit")
 
     mcp = build_mcp()
-    await mcp.call_tool("ping", {})
+    await mcp.call_tool("probe_ping", {})
 
     audit_records = [
         json.loads(r.message)

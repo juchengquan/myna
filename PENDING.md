@@ -1,7 +1,6 @@
 # Pending
 
-Status as of 1 November 2026, at `main` commit `609d4c4`. There are no open PRs or
-issues, and CI passes.
+Status as of 2 November 2026. There are no open issues, and CI passes.
 
 ## Needs a decision
 
@@ -23,9 +22,6 @@ clients, so they don't need separate testing.
 - [ ] Claude Desktop
 - [ ] A real person using the `confirm_action` form. It has only been driven with
       simulated keystrokes, with permission prompts bypassed.
-- [ ] Removing the demos other than weather, which CI doesn't cover
-- [ ] A Linux bind mount that hasn't been prepared with `chown`. It's expected to
-      fail, and the docs say to prepare it first.
 
 ## Not built yet
 
@@ -40,13 +36,11 @@ Build these when a real need appears.
 - [ ] **Per-tool permissions:** every key can use every tool.
 - [ ] **Shared rate limits:** limits are per process, so several instances allow more
       in total. The active key cap also isn't strict under simultaneous creates.
-- [ ] **Easier removal of the other demos:** `stream_count` and `confirm_action` are
-      mixed into `tests/test_wire.py` and `scripts/smoke_test.py`.
 
 ## Worth knowing
 
-- **`main` is ahead of `v0.2.0`:** it's nine commits past the tag, including breaking
-  changes like the new `MYNA_MCP_API_KEYS` format. The version only changes on request.
+- **`main` is ahead of `v0.2.0`:** it has many commits since the tag, including
+  breaking changes like the new `MYNA_MCP_API_KEYS` format. The version only changes on request.
 - **API docs are open:** `/docs`, `/redoc`, and `/openapi.json` need no key, even in
   production. They describe the REST routes, including the key routes, so restrict
   them on a real deployment.

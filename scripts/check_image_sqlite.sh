@@ -40,7 +40,7 @@ expect_ping() {
     -H "Authorization: Bearer $key" \
     -H 'Content-Type: application/json' \
     -H 'Accept: application/json, text/event-stream' \
-    -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ping","arguments":{}}}')
+    -d '{"jsonrpc":"2.0","id":1,"method":"ping"}')
   echo "POST /mcp/ returned $status"
   test "$status" = "$expected"
 }

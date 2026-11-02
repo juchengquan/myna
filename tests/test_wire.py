@@ -110,7 +110,7 @@ async def _modern_client(
 
 
 async def _on_elicitation(context: Any, params: Any) -> ElicitResult:
-    return ElicitResult(action="accept", content={"confirmed": True, "note": "ok"})
+    return ElicitResult(action="accept", content={"confirmed": True})
 
 
 def _text(result: Any) -> str:
@@ -127,13 +127,13 @@ async def test_tools_are_offered_in_both_modes(
     async with _session(url) as session:
         tools = {t.name for t in (await session.list_tools()).tools}
 
-    assert {"ping", "stream_count", "confirm_action"} <= tools
+    assert {"probe_ping", "probe_count", "probe_confirm"} <= tools
 
 
 async def test_stateless_legacy_elicitation_fails_without_hanging(stateless_url: str) -> None:
     async with _session(stateless_url, elicitation_callback=_on_elicitation) as session:
         with pytest.raises(MCPError) as exc_info:
-            await session.call_tool("confirm_action", {"action": "deploy"})
+            await session.call_tool("probe_confirm", {"action": "deploy"})
 
     assert exc_info.value.error.code == INVALID_REQUEST
 
@@ -141,13 +141,13 @@ async def test_stateless_legacy_elicitation_fails_without_hanging(stateless_url:
 async def test_mount_path_works_without_trailing_slash(stateless_url: str) -> None:
     # `_session` doesn't follow redirects, so this fails on a 307.
     async with _session(stateless_url.rstrip("/")) as session:
-        result = await session.call_tool("ping", {})
+        result = await session.call_tool("probe_ping", {})
 
     assert _text(result) == "pong"
 
 
 @pytest.mark.parametrize("fixture", ["stateless_url", "stateful_url"])
-async def test_legacy_stream_count_delivers_progress(
+async def test_legacy_progress_is_delivered(
     fixture: str, request: pytest.FixtureRequest
 ) -> None:
     url = cast(str, request.getfixturevalue(fixture))
@@ -158,7 +158,7 @@ async def test_legacy_stream_count_delivers_progress(
 
     async with _session(url) as session:
         result = await session.call_tool(
-            "stream_count", {"n": 2, "delay_ms": 0}, progress_callback=on_progress
+            "probe_count", {"n": 2}, progress_callback=on_progress
         )
 
     assert _text(result) == "counted to 2"
@@ -167,10 +167,10 @@ async def test_legacy_stream_count_delivers_progress(
 
 async def test_stateful_legacy_elicitation_round_trip(stateful_url: str) -> None:
     async with _session(stateful_url, elicitation_callback=_on_elicitation) as session:
-        result = await session.call_tool("confirm_action", {"action": "deploy"})
+        result = await session.call_tool("probe_confirm", {"action": "deploy"})
 
     assert not result.is_error
-    assert "approved" in _text(result)
+    assert _text(result) == "approved deploy"
 
 
 async def test_stateful_legacy_elicitation_refused_without_client_capability(
@@ -178,13 +178,13 @@ async def test_stateful_legacy_elicitation_refused_without_client_capability(
 ) -> None:
     async with _session(stateful_url) as session:
         with pytest.raises(MCPError) as exc_info:
-            await session.call_tool("confirm_action", {"action": "deploy"})
+            await session.call_tool("probe_confirm", {"action": "deploy"})
 
     assert exc_info.value.error.code == MISSING_CLIENT_CAPABILITY
 
 
 @pytest.mark.parametrize("fixture", ["stateless_url", "stateful_url"])
-async def test_modern_stream_count_delivers_progress(
+async def test_modern_progress_is_delivered(
     fixture: str, request: pytest.FixtureRequest
 ) -> None:
     url = cast(str, request.getfixturevalue(fixture))
@@ -195,7 +195,7 @@ async def test_modern_stream_count_delivers_progress(
 
     async with _modern_client(url) as client:
         result = await client.call_tool(
-            "stream_count", {"n": 2, "delay_ms": 0}, progress_callback=on_progress
+            "probe_count", {"n": 2}, progress_callback=on_progress
         )
 
     assert _text(result) == "counted to 2"
@@ -208,10 +208,10 @@ async def test_modern_elicitation_round_trip(
 ) -> None:
     url = cast(str, request.getfixturevalue(fixture))
     async with _modern_client(url, elicitation_callback=_on_elicitation) as client:
-        result = await client.call_tool("confirm_action", {"action": "deploy"})
+        result = await client.call_tool("probe_confirm", {"action": "deploy"})
 
     assert not result.is_error
-    assert "approved" in _text(result)
+    assert _text(result) == "approved deploy"
 
 
 @pytest.mark.parametrize("stateless", [True, False])
@@ -219,25 +219,25 @@ async def test_caller_reaches_metrics_on_both_protocol_eras(
     monkeypatch: pytest.MonkeyPatch, stateless: bool
 ) -> None:
     token = {"Authorization": "Bearer sk-wire"}
-    labels = {"tool": "ping", "caller": "wire-client", "status": "ok"}
+    labels = {"tool": "probe_ping", "caller": "wire-client", "status": "ok"}
     before = metric_value(TOOL_CALLS, **labels)
 
     api_keys = "wire-client:sk-wire"
     with _live_server(monkeypatch, stateless=stateless, api_keys=api_keys) as url:
         async with _session(url, headers=token) as session:
-            await session.call_tool("ping", {})
+            await session.call_tool("probe_ping", {})
         async with _modern_client(url, headers=token) as client:
-            await client.call_tool("ping", {})
+            await client.call_tool("probe_ping", {})
 
     assert metric_value(TOOL_CALLS, **labels) == before + 2
 
 
 async def test_tool_errors_reach_the_client(stateless_url: str) -> None:
     async with _session(stateless_url) as session:
-        result = await session.call_tool("stream_count", {"n": 0})
+        result = await session.call_tool("probe_fail", {})
 
     assert result.is_error
-    assert "n must be between 1 and 20" in _text(result)
+    assert _text(result).endswith("probe failed")
 
 
 INITIALIZE = {
@@ -262,23 +262,23 @@ async def _status_counts(tool: str) -> tuple[float, float]:
 
 
 async def test_modern_question_is_not_counted_as_a_completed_call(stateful_url: str) -> None:
-    ok_before, asked_before = await _status_counts("confirm_action")
+    ok_before, asked_before = await _status_counts("probe_confirm")
 
     async with _modern_client(stateful_url, elicitation_callback=_on_elicitation) as client:
-        await client.call_tool("confirm_action", {"action": "deploy"})
+        await client.call_tool("probe_confirm", {"action": "deploy"})
 
-    ok_after, asked_after = await _status_counts("confirm_action")
+    ok_after, asked_after = await _status_counts("probe_confirm")
     assert ok_after == ok_before + 1
     assert asked_after == asked_before + 1
 
 
 async def test_legacy_question_is_counted_once(stateful_url: str) -> None:
-    ok_before, asked_before = await _status_counts("confirm_action")
+    ok_before, asked_before = await _status_counts("probe_confirm")
 
     async with _session(stateful_url, elicitation_callback=_on_elicitation) as session:
-        await session.call_tool("confirm_action", {"action": "deploy"})
+        await session.call_tool("probe_confirm", {"action": "deploy"})
 
-    ok_after, asked_after = await _status_counts("confirm_action")
+    ok_after, asked_after = await _status_counts("probe_confirm")
     assert ok_after == ok_before + 1
     assert asked_after == asked_before
 

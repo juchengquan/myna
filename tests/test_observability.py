@@ -16,6 +16,7 @@ from myna.observability import (
     metric_value,
     render_metrics,
 )
+from tests.probes import INFO_URI
 
 
 def test_metrics_endpoint_serves_prometheus_format(client: TestClient) -> None:
@@ -37,27 +38,28 @@ def test_metrics_endpoint_serves_prometheus_format(client: TestClient) -> None:
 @pytest.mark.asyncio
 async def test_tool_call_increments_metrics() -> None:
     mcp = build_mcp()
-    before_ok = metric_value(TOOL_CALLS, tool="ping", caller="anonymous", status="ok")
-    before_hist = histogram_count(TOOL_DURATION, tool="ping")
+    labels = {"tool": "probe_ping", "caller": "anonymous", "status": "ok"}
+    before_ok = metric_value(TOOL_CALLS, **labels)
+    before_hist = histogram_count(TOOL_DURATION, tool="probe_ping")
 
-    await mcp.call_tool("ping", {})
+    await mcp.call_tool("probe_ping", {})
 
-    assert metric_value(TOOL_CALLS, tool="ping", caller="anonymous", status="ok") == before_ok + 1
-    assert histogram_count(TOOL_DURATION, tool="ping") == before_hist + 1
+    assert metric_value(TOOL_CALLS, **labels) == before_ok + 1
+    assert histogram_count(TOOL_DURATION, tool="probe_ping") == before_hist + 1
 
 
 @pytest.mark.asyncio
 async def test_failed_tool_call_recorded_as_error() -> None:
     mcp = build_mcp()
     before_err = metric_value(
-        TOOL_CALLS, tool="stream_count", caller="anonymous", status="error"
+        TOOL_CALLS, tool="probe_fail", caller="anonymous", status="error"
     )
 
     with pytest.raises(ToolError):
-        await mcp.call_tool("stream_count", {"n": 0, "delay_ms": 0})
+        await mcp.call_tool("probe_fail", {})
 
     assert (
-        metric_value(TOOL_CALLS, tool="stream_count", caller="anonymous", status="error")
+        metric_value(TOOL_CALLS, tool="probe_fail", caller="anonymous", status="error")
         == before_err + 1
     )
 
@@ -65,7 +67,7 @@ async def test_failed_tool_call_recorded_as_error() -> None:
 @pytest.mark.asyncio
 async def test_resource_read_increments_metrics() -> None:
     mcp = build_mcp()
-    uri = "myna://server-info"
+    uri = INFO_URI
     before = metric_value(RESOURCE_READS, uri=uri, caller="anonymous", status="ok")
     before_hist = histogram_count(RESOURCE_DURATION, uri=uri)
 
@@ -78,14 +80,14 @@ async def test_resource_read_increments_metrics() -> None:
 @pytest.mark.asyncio
 async def test_prompt_get_increments_metrics() -> None:
     mcp = build_mcp()
-    before = metric_value(PROMPT_GETS, name="summarize", caller="anonymous", status="ok")
-    before_hist = histogram_count(PROMPT_DURATION, name="summarize")
+    before = metric_value(PROMPT_GETS, name="probe_prompt", caller="anonymous", status="ok")
+    before_hist = histogram_count(PROMPT_DURATION, name="probe_prompt")
 
-    await mcp.get_prompt("summarize", {"text": "hello", "sentences": "1"})
+    await mcp.get_prompt("probe_prompt", {"text": "hello"})
 
-    after = metric_value(PROMPT_GETS, name="summarize", caller="anonymous", status="ok")
+    after = metric_value(PROMPT_GETS, name="probe_prompt", caller="anonymous", status="ok")
     assert after == before + 1
-    assert histogram_count(PROMPT_DURATION, name="summarize") == before_hist + 1
+    assert histogram_count(PROMPT_DURATION, name="probe_prompt") == before_hist + 1
 
 
 @pytest.mark.asyncio

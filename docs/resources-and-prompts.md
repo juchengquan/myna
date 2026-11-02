@@ -14,8 +14,8 @@ Read-only data the client can pull by URI. Two flavors:
   read time. Example: `weather://locations/{location}`.
 
 Resources live under [`src/myna/resources/`](../src/myna/resources/).
-Each module exposes a `register(mcp)` function and is wired up from
-`mcp_server._register_resources()`.
+Each module exposes a `register(mcp)` function and is listed in
+`mcp_server.REGISTRATIONS`.
 
 ### Authoring
 

@@ -5,7 +5,16 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
+from myna import mcp_server
 from myna.main import create_app
+from tests import probes
+
+
+@pytest.fixture(autouse=True)
+def _register_probes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        mcp_server, "REGISTRATIONS", [*mcp_server.REGISTRATIONS, probes.register]
+    )
 
 
 @pytest.fixture()

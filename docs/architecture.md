@@ -120,10 +120,11 @@ src/myna/
 - **Per-app MCP instance.** Required by the SDK's session manager
   lifecycle; also makes `TestClient` and multi-worker setups predictable.
 - **Pluggable tool registration.** Each `tools/<name>.py` exposes a
-  `register(mcp: MCPServer)` function called from
-  `mcp_server._register_tools()`. Adding a tool means adding a module
-  and one line in that registrar — no decorator magic at import time,
-  so test isolation stays clean.
+  `register(mcp: MCPServer)` function, listed in
+  `mcp_server.REGISTRATIONS`. Adding a module means an import and one
+  line in that list — no decorator magic at import time, so test
+  isolation stays clean. Tests add their own tools from `tests/probes.py`
+  to that list, so they don't depend on the examples.
 - **Observe through the public API.** `ObservedMCPServer` overrides the
   server's public `call_tool`, `read_resource`, and `get_prompt`, which the
   protocol handlers also call, so there's no patching of SDK internals.

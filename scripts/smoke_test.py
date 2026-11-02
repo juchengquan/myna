@@ -1,8 +1,9 @@
 """End-to-end smoke test for a running Myna MCP server.
 
 Connects to the Streamable HTTP endpoint as a real MCP client, once as a
-legacy client and once as a 2026-07-28 client. It lists the registered
-tools and calls each of the example tools. Use this to verify the wire
+legacy client and once as a 2026-07-28 client. It lists what the server
+offers and calls each example that's still installed, so it keeps working as
+you remove them. Use this to verify the wire
 protocol is working — most of `pytest` exercises tools in-process and
 won't catch transport-level regressions.
 
@@ -73,14 +74,10 @@ async def run(url: str, api_key: str | None = None) -> int:
         tool_names = [t.name for t in tools.tools]
         _dump("tools/list", {"tools": tool_names})
 
-        expected = {"ping", "echo", "stream_count", "confirm_action"}
-        missing = expected - set(tool_names)
-        if missing:
-            print(f"\nMISSING expected tools: {sorted(missing)}", file=sys.stderr)
-            return 1
-
-        _dump("call ping", await session.call_tool("ping", {}))
-        _dump("call echo", await session.call_tool("echo", {"message": "hello myna"}))
+        if "ping" in tool_names:
+            _dump("call ping", await session.call_tool("ping", {}))
+        if "echo" in tool_names:
+            _dump("call echo", await session.call_tool("echo", {"message": "hello myna"}))
         has_weather = "get_weather" in tool_names
         if has_weather:
             _dump(
@@ -94,42 +91,46 @@ async def run(url: str, api_key: str | None = None) -> int:
                 ),
             )
 
-        progress_events = 0
+        if "stream_count" in tool_names:
+            progress_events = 0
 
-        async def count_progress(progress: float, total: float | None, message: str | None) -> None:
-            nonlocal progress_events
-            progress_events += 1
-            await _on_progress(progress, total, message)
+            async def count_progress(
+                progress: float, total: float | None, message: str | None
+            ) -> None:
+                nonlocal progress_events
+                progress_events += 1
+                await _on_progress(progress, total, message)
 
-        print("\n=== call stream_count (streaming progress below) ===")
-        stream_result = await session.call_tool(
-            "stream_count",
-            {"n": 5, "delay_ms": 100},
-            progress_callback=count_progress,
-        )
-        _dump("stream_count final", stream_result)
+            print("\n=== call stream_count (streaming progress below) ===")
+            stream_result = await session.call_tool(
+                "stream_count",
+                {"n": 5, "delay_ms": 100},
+                progress_callback=count_progress,
+            )
+            _dump("stream_count final", stream_result)
 
-        if progress_events != 5:
-            print(f"\nExpected 5 progress events, got {progress_events}", file=sys.stderr)
-            return 1
-
-        # A legacy client in stateless mode has no channel for the question.
-        try:
-            async with asyncio.timeout(INTERACTIVE_TIMEOUT_SECONDS):
-                result = await session.call_tool("confirm_action", CONFIRM_ARGUMENTS)
-        except TimeoutError:
-            print("\nconfirm_action did not finish in time", file=sys.stderr)
-            return 1
-        except MCPError as exc:
-            if exc.error.code != INVALID_REQUEST:
-                print(f"\nconfirm_action failed: {exc}", file=sys.stderr)
+            if progress_events != 5:
+                print(f"\nExpected 5 progress events, got {progress_events}", file=sys.stderr)
                 return 1
-            print("\nServer is stateless: legacy clients can't be asked questions.")
-        else:
-            _dump("call confirm_action", result)
-            if result.is_error:
-                print("\nconfirm_action returned an error", file=sys.stderr)
+
+        if "confirm_action" in tool_names:
+            # A legacy client in stateless mode has no channel for the question.
+            try:
+                async with asyncio.timeout(INTERACTIVE_TIMEOUT_SECONDS):
+                    result = await session.call_tool("confirm_action", CONFIRM_ARGUMENTS)
+            except TimeoutError:
+                print("\nconfirm_action did not finish in time", file=sys.stderr)
                 return 1
+            except MCPError as exc:
+                if exc.error.code != INVALID_REQUEST:
+                    print(f"\nconfirm_action failed: {exc}", file=sys.stderr)
+                    return 1
+                print("\nServer is stateless: legacy clients can't be asked questions.")
+            else:
+                _dump("call confirm_action", result)
+                if result.is_error:
+                    print("\nconfirm_action returned an error", file=sys.stderr)
+                    return 1
 
         # --- Resources ---
         resources = await session.list_resources()
@@ -142,13 +143,8 @@ async def run(url: str, api_key: str | None = None) -> int:
             },
         )
 
-        expected_resources = {"server-info"}
-        missing_r = expected_resources - {r.name for r in resources.resources}
-        if missing_r:
-            print(f"\nMISSING expected resources: {sorted(missing_r)}", file=sys.stderr)
-            return 1
-
-        _dump("read myna://server-info", await session.read_resource("myna://server-info"))
+        if "server-info" in {r.name for r in resources.resources}:
+            _dump("read myna://server-info", await session.read_resource("myna://server-info"))
         if has_weather:
             _dump(
                 "read weather://locations/Tokyo",
@@ -159,18 +155,13 @@ async def run(url: str, api_key: str | None = None) -> int:
         prompts = await session.list_prompts()
         _dump("prompts/list", {"prompts": [p.name for p in prompts.prompts]})
 
-        expected_prompts = {"summarize"}
-        missing_p = expected_prompts - {p.name for p in prompts.prompts}
-        if missing_p:
-            print(f"\nMISSING expected prompts: {sorted(missing_p)}", file=sys.stderr)
-            return 1
-
-        _dump(
-            "get_prompt summarize",
-            await session.get_prompt(
-                "summarize", {"text": "MCP lets agents call tools.", "sentences": "1"}
-            ),
-        )
+        if "summarize" in {p.name for p in prompts.prompts}:
+            _dump(
+                "get_prompt summarize",
+                await session.get_prompt(
+                    "summarize", {"text": "MCP lets agents call tools.", "sentences": "1"}
+                ),
+            )
         if has_weather:
             _dump(
                 "get_prompt weather-report",
@@ -179,10 +170,10 @@ async def run(url: str, api_key: str | None = None) -> int:
                 ),
             )
 
-    return await run_modern(url, headers)
+    return await run_modern(url, headers, set(tool_names))
 
 
-async def run_modern(url: str, headers: dict[str, str] | None) -> int:
+async def run_modern(url: str, headers: dict[str, str] | None, tool_names: set[str]) -> int:
     print("\n=== 2026-07-28 client ===")
     progress_events = 0
 
@@ -202,20 +193,28 @@ async def run_modern(url: str, headers: dict[str, str] | None) -> int:
             print(f"\nExpected protocol {MODERN_PROTOCOL}", file=sys.stderr)
             return 1
 
-        _dump("call ping", await client.call_tool("ping", {}))
-        await client.call_tool(
-            "stream_count", {"n": 5, "delay_ms": 0}, progress_callback=count_progress
-        )
-        if progress_events != 5:
-            print(f"\nExpected 5 progress events, got {progress_events}", file=sys.stderr)
+        modern_tools = {t.name for t in (await client.list_tools()).tools}
+        if modern_tools != tool_names:
+            print("\nThe two clients were offered different tools", file=sys.stderr)
             return 1
 
-        async with asyncio.timeout(INTERACTIVE_TIMEOUT_SECONDS):
-            result = await client.call_tool("confirm_action", CONFIRM_ARGUMENTS)
-        _dump("call confirm_action", result)
-        if result.is_error:
-            print("\nconfirm_action returned an error", file=sys.stderr)
-            return 1
+        if "ping" in tool_names:
+            _dump("call ping", await client.call_tool("ping", {}))
+        if "stream_count" in tool_names:
+            await client.call_tool(
+                "stream_count", {"n": 5, "delay_ms": 0}, progress_callback=count_progress
+            )
+            if progress_events != 5:
+                print(f"\nExpected 5 progress events, got {progress_events}", file=sys.stderr)
+                return 1
+
+        if "confirm_action" in tool_names:
+            async with asyncio.timeout(INTERACTIVE_TIMEOUT_SECONDS):
+                result = await client.call_tool("confirm_action", CONFIRM_ARGUMENTS)
+            _dump("call confirm_action", result)
+            if result.is_error:
+                print("\nconfirm_action returned an error", file=sys.stderr)
+                return 1
 
     print("\nSmoke test OK")
     return 0

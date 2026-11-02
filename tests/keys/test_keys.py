@@ -4,8 +4,10 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -19,7 +21,7 @@ from myna.keys.store import KEY_PREFIX, create_engine, normalize_database_url
 from myna.observability import RATE_LIMIT_HITS, TOOL_CALLS, metric_value
 from tests.keys.conftest import KEY_ADMIN
 
-PING = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "ping"}}
+PING = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "probe_ping"}}
 
 
 def _call_mcp(client: TestClient, token: str) -> int:
@@ -48,7 +50,7 @@ def _advance(client: TestClient, delta: timedelta) -> None:
 
 
 def test_created_key_works_and_is_attributed_to_its_name(client: TestClient) -> None:
-    labels = {"tool": "ping", "caller": "metrics-name", "status": "ok"}
+    labels = {"tool": "probe_ping", "caller": "metrics-name", "status": "ok"}
     before = metric_value(TOOL_CALLS, **labels)
 
     created = _create(client, name="metrics-name")
@@ -158,7 +160,7 @@ def test_invalid_requests_are_rejected(client: TestClient, body: dict[str, Any])
 
 
 def test_names_may_repeat_for_rotation(client: TestClient) -> None:
-    labels = {"tool": "ping", "caller": "rotating", "status": "ok"}
+    labels = {"tool": "probe_ping", "caller": "rotating", "status": "ok"}
     before = metric_value(TOOL_CALLS, **labels)
     old = _create(client, name="rotating")
     new = _create(client, name="rotating")
@@ -355,6 +357,23 @@ def test_migrate_failure_does_not_print_the_password(monkeypatch: pytest.MonkeyP
     with pytest.raises(SystemExit) as exc_info:
         migrate_main()
     assert "hunter2" not in str(exc_info.value)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can write to any folder")
+def test_migrate_names_an_unwritable_sqlite_folder(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    folder = tmp_path / "data"
+    folder.mkdir(mode=0o555)
+    monkeypatch.setenv("MYNA_DATABASE_URL", f"sqlite:///{folder}/keys.db")
+    try:
+        with pytest.raises(SystemExit) as exc_info:
+            migrate_main()
+    finally:
+        folder.chmod(0o755)
+    message = str(exc_info.value)
+    assert f"user {os.getuid()} can't write to {folder}" in message
+    assert f"sudo chown {os.getuid()}:{os.getgid()}" in message
 
 
 @pytest.mark.parametrize(

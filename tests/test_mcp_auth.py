@@ -127,9 +127,9 @@ def test_both_keys_work_during_rotation(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("MYNA_ENV", "production")
     monkeypatch.setenv("MYNA_MCP_API_KEYS", "client-a:sk-old,client-a:sk-new")
     monkeypatch.setenv("MYNA_ADMIN_API_KEY", "x")
-    labels = {"tool": "ping", "caller": "client-a", "status": "ok"}
+    labels = {"tool": "probe_ping", "caller": "client-a", "status": "ok"}
     before = metric_value(TOOL_CALLS, **labels)
-    call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "ping"}}
+    call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "probe_ping"}}
 
     with _client() as client:
         for token in ("sk-old", "sk-new"):

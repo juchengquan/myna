@@ -6,6 +6,7 @@ same time can't race each other.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from alembic import command
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -59,6 +61,17 @@ async def check_schema(engine: AsyncEngine, url: str) -> None:
         )
 
 
+def _unwritable_sqlite_folder(url: str) -> Path | None:
+    """Return the SQLite file's folder if it exists but this user can't write to it."""
+    parsed = make_url(url)
+    if not parsed.drivername.startswith("sqlite") or parsed.database in (None, "", ":memory:"):
+        return None
+    folder = Path(parsed.database).parent.absolute()
+    if folder.is_dir() and not os.access(folder, os.W_OK | os.X_OK):
+        return folder
+    return None
+
+
 def main() -> None:
     url = get_settings().database_url
     if not url:
@@ -66,6 +79,14 @@ def main() -> None:
     try:
         upgrade(url)
     except (SQLAlchemyError, OSError, TimeoutError) as exc:
+        folder = _unwritable_sqlite_folder(url)
+        if folder is not None:
+            uid, gid = os.getuid(), os.getgid()
+            sys.exit(
+                f"Migration failed: user {uid} can't write to {folder}. If it's a bind "
+                f"mount, make the host folder writable by that user: "
+                f"sudo chown {uid}:{gid} <host folder>"
+            )
         sys.exit(
             f"Migration failed: {type(exc).__name__}. "
             "Check that the database is reachable and writable."

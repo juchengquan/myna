@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
@@ -7,6 +9,23 @@ from starlette.applications import Starlette
 from myna import __version__
 from myna.config import get_settings
 from myna.observability import ObservedMCPServer
+from myna.prompts.example import register as register_example_prompts
+from myna.resources.example import register as register_example_resources
+from myna.tools.elicitation import register as register_elicitation
+from myna.tools.example import register as register_example_tools
+from myna.tools.streaming import register as register_streaming
+from myna.weather import register as register_weather
+
+# Each module's `register(mcp)` adds its tools, resources, and prompts. To add a
+# module, import it and list it here. To remove one, delete both of its lines.
+REGISTRATIONS: list[Callable[[MCPServer], None]] = [
+    register_example_tools,
+    register_streaming,
+    register_elicitation,
+    register_weather,
+    register_example_resources,
+    register_example_prompts,
+]
 
 
 def build_mcp() -> MCPServer:
@@ -17,9 +36,8 @@ def build_mcp() -> MCPServer:
     """
     settings = get_settings()
     mcp = ObservedMCPServer(settings.mcp_server_name, version=__version__)
-    _register_tools(mcp)
-    _register_resources(mcp)
-    _register_prompts(mcp)
+    for register in REGISTRATIONS:
+        register(mcp)
     return mcp
 
 
@@ -37,25 +55,3 @@ def build_mcp_app(mcp: MCPServer) -> Starlette:
             allowed_origins=settings.mcp_allowed_origins,
         ),
     )
-
-
-def _register_tools(mcp: MCPServer) -> None:
-    from myna import weather
-    from myna.tools import elicitation, example, streaming
-
-    example.register(mcp)
-    streaming.register(mcp)
-    weather.register(mcp)
-    elicitation.register(mcp)
-
-
-def _register_resources(mcp: MCPServer) -> None:
-    from myna.resources import example as resource_example
-
-    resource_example.register(mcp)
-
-
-def _register_prompts(mcp: MCPServer) -> None:
-    from myna.prompts import example as prompt_example
-
-    prompt_example.register(mcp)

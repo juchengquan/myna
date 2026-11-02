@@ -2,8 +2,8 @@
 
 Tools live under [`src/myna/tools/`](../src/myna/tools/). Each module
 exposes a `register(mcp: MCPServer)` function that adds tools (or
-resources/prompts) to the shared `MCPServer` instance, and is wired up
-in `src/myna/mcp_server.py::_register_tools`.
+resources/prompts) to the shared `MCPServer` instance, and is listed in
+`REGISTRATIONS` in `src/myna/mcp_server.py`.
 
 ## Anatomy of a tool module
 
@@ -30,13 +30,13 @@ Wire it up:
 
 ```python
 # src/myna/mcp_server.py
-def _register_tools(mcp: MCPServer) -> None:
-    from myna import weather
-    from myna.tools import example, greeting
+from myna.tools.greeting import register as register_greeting
 
-    example.register(mcp)
-    greeting.register(mcp)
-    weather.register(mcp)
+REGISTRATIONS: list[Callable[[MCPServer], None]] = [
+    register_example_tools,
+    ...
+    register_greeting,
+]
 ```
 
 That's it — the tool is now visible to MCP clients and via

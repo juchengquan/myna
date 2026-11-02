@@ -83,16 +83,27 @@ perl -ni -e 'print unless /OPEN_METEO|Open-Meteo/' .env.example
 uv run pytest
 ```
 
-CI runs both of these blocks on every PR, so they should keep working.
+To remove the other examples (`ping`, `echo`, `stream_count`, `confirm_action`,
+`server-info`, and `summarize`):
+
+```bash
+rm src/$NAME/tools/{example,streaming,elicitation}.py src/$NAME/{resources,prompts}/example.py
+rm tests/test_{streaming_tool,elicitation_tool,resources,prompts}.py
+perl -ni -e 'print unless /example|streaming|elicitation/' "src/$NAME/mcp_server.py"
+uv run pytest
+```
+
+To remove only some of them, delete each one's module, its two lines in
+`mcp_server.py`, and its test file. The framework's own tests use test-only
+tools in `tests/probes.py` and don't depend on the examples.
+`scripts/smoke_test.py` only checks the examples that are still installed.
+
+CI runs all three blocks on every PR, so they should keep working.
 
 Then:
 
 - Check the repo URL in the weather client's `User-Agent`, if you kept it. The
   rename also rewrites it, along with this section.
-- Remove other examples as you go. Each is a module in `tools/`, a line in
-  `mcp_server.py`, and its tests. `stream_count` and `confirm_action` also have
-  cases in `tests/test_wire.py` and checks in `scripts/smoke_test.py`, and
-  `summarize` is listed in `scripts/smoke_test.py`.
 - Update the docs, which still use weather in their examples, along with the
   docstrings in `cache.py` and `resources/example.py`.
 - Note the license. The code is GPL-3.0, which generally applies to anything
@@ -111,7 +122,8 @@ session affinity. Clients older than the 2026-07-28 spec need
 ## Adding tools
 
 Register MCP tools in `src/myna/tools/`. Each module exposes a `register(mcp)` function
-that adds tools/resources/prompts to the shared `MCPServer` instance. See `tools/example.py`.
+that adds tools/resources/prompts to the shared `MCPServer` instance. Import it in
+`mcp_server.py` and add it to `REGISTRATIONS`. See `tools/example.py`.
 
 ## Layout
 

@@ -48,6 +48,7 @@ Build these when a real need appears.
   tool. Restrict that route at the proxy.
 - **SQLite without a volume:** in a container, `myna-migrate` succeeds, but the keys
   are lost with the container.
-- **"Bypass permissions" in Claude Code:** a test session started with it on, probably
-  from local settings. If so, sessions using that setting skip tool permission
-  prompts, so check that's intended.
+- **"Bypass permissions" in Claude Code:** user settings (`~/.claude/settings.json`)
+  set `"defaultMode": "bypassPermissions"`, so every Claude Code session on that
+  machine runs tools without asking. Keep it if that's intended. Otherwise set it to
+  `"default"` or `"acceptEdits"`.

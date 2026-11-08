@@ -35,7 +35,7 @@ myna-migrate = "myna.keys.migrate:main"
 [dependency-groups]
 dev = [
     "pytest>=8.0",
-    "pytest-asyncio>=0.23",
+    "pytest-asyncio>=1.4.1.post1",
     "pytest-cov>=5.0",
     "ruff>=0.6",
     "mypy>=1.10",
